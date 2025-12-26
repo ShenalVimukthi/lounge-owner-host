@@ -41,7 +41,7 @@ func TestGenerateOTP(t *testing.T) {
 		WithArgs(phone, sqlmock.AnyArg(), sqlmock.AnyArg(), MaxOTPAttempts).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
-	otp, err := service.GenerateOTP(phone)
+	otp, err := service.GenerateOTP(phone, "192.168.1.1", "Mozilla/5.0")
 	require.NoError(t, err)
 	assert.Len(t, otp, 6)
 	assert.Regexp(t, "^[0-9]{6}$", otp)
@@ -71,7 +71,7 @@ func TestGenerateOTP_Uniqueness(t *testing.T) {
 			WithArgs(phone, sqlmock.AnyArg(), sqlmock.AnyArg(), MaxOTPAttempts).
 			WillReturnResult(sqlmock.NewResult(1, 1))
 
-		otp, err := service.GenerateOTP(phone)
+		otp, err := service.GenerateOTP(phone, "192.168.1.1", "Mozilla/5.0")
 		require.NoError(t, err)
 		otps[otp] = true
 	}

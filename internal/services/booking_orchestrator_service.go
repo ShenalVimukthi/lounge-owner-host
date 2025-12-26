@@ -164,14 +164,14 @@ func (s *BookingOrchestratorService) CreateIntent(
 		heldCount, err := s.intentRepo.HoldSeatsForIntent(intent.ID, seatIDs, expiresAt)
 		if err != nil {
 			s.rollbackHolds(intent.ID)
-			s.intentRepo.UpdateIntentExpired(intent.ID)
+			_ = s.intentRepo.UpdateIntentExpired(intent.ID)
 			return nil, fmt.Errorf("failed to hold seats: %w", err)
 		}
 
 		if heldCount < len(seatIDs) {
 			// Some seats couldn't be held - they were taken
 			s.rollbackHolds(intent.ID)
-			s.intentRepo.UpdateIntentExpired(intent.ID)
+			_ = s.intentRepo.UpdateIntentExpired(intent.ID)
 
 			// Find which seats were taken
 			_, unavailable, _ := s.intentRepo.CheckSeatsAvailableForHold(seatIDs)
@@ -184,7 +184,7 @@ func (s *BookingOrchestratorService) CreateIntent(
 		err := s.createLoungeHold(intent.ID, req.PreTripLounge, expiresAt, "pre_trip")
 		if err != nil {
 			s.rollbackHolds(intent.ID)
-			s.intentRepo.UpdateIntentExpired(intent.ID)
+			_ = s.intentRepo.UpdateIntentExpired(intent.ID)
 			return nil, err
 		}
 	}
@@ -192,7 +192,7 @@ func (s *BookingOrchestratorService) CreateIntent(
 		err := s.createLoungeHold(intent.ID, req.PostTripLounge, expiresAt, "post_trip")
 		if err != nil {
 			s.rollbackHolds(intent.ID)
-			s.intentRepo.UpdateIntentExpired(intent.ID)
+			_ = s.intentRepo.UpdateIntentExpired(intent.ID)
 			return nil, err
 		}
 	}
@@ -341,7 +341,7 @@ func (s *BookingOrchestratorService) processLoungeIntent(
 	}
 
 	var pricePerGuest float64
-	fmt.Sscanf(priceStr, "%f", &pricePerGuest)
+	_, _ = fmt.Sscanf(priceStr, "%f", &pricePerGuest)
 
 	// 3. Build guests list
 	guests := make([]models.LoungeIntentGuest, len(req.Guests))
@@ -371,7 +371,7 @@ func (s *BookingOrchestratorService) processLoungeIntent(
 		}
 
 		var unitPrice float64
-		fmt.Sscanf(product.Price, "%f", &unitPrice)
+		_, _ = fmt.Sscanf(product.Price, "%f", &unitPrice)
 
 		preOrders = append(preOrders, models.LoungeIntentPreOrder{
 			ProductID:   po.ProductID,
@@ -631,7 +631,7 @@ func (s *BookingOrchestratorService) ConfirmBooking(
 		busBooking, bookingRef, err := s.createBusBookingFromIntent(intent)
 		if err != nil {
 			// Mark as confirmation failed
-			s.intentRepo.UpdateIntentConfirmationFailed(intent.ID)
+			_ = s.intentRepo.UpdateIntentConfirmationFailed(intent.ID)
 			return nil, fmt.Errorf("failed to create bus booking: %w", err)
 		}
 		busBookingUUID, _ := uuid.Parse(busBooking.ID)
@@ -666,7 +666,7 @@ func (s *BookingOrchestratorService) ConfirmBooking(
 
 			// For lounge_only intents, if lounge booking fails, the whole intent fails
 			if intent.IntentType == models.IntentTypeLoungeOnly {
-				s.intentRepo.UpdateIntentConfirmationFailed(intent.ID)
+				_ = s.intentRepo.UpdateIntentConfirmationFailed(intent.ID)
 				return nil, fmt.Errorf("failed to create lounge booking: %w", err)
 			}
 			// For combined intents, continue - at least bus booking is created
@@ -709,7 +709,7 @@ func (s *BookingOrchestratorService) ConfirmBooking(
 	}
 
 	// 9. Confirm lounge holds (convert from held to confirmed)
-	s.intentRepo.ConfirmLoungeHoldsForIntent(intent.ID)
+	_ = s.intentRepo.ConfirmLoungeHoldsForIntent(intent.ID)
 
 	// 10. Update lounge booking statuses and payment status to confirmed/paid
 	if preLoungeBookingID != nil {
@@ -799,7 +799,7 @@ func (s *BookingOrchestratorService) createBusBookingFromIntent(intent *models.B
 	}
 
 	// Clear seat holds (they are now booked)
-	s.intentRepo.ReleaseSeatHoldsForIntent(intent.ID)
+	_ = s.intentRepo.ReleaseSeatHoldsForIntent(intent.ID)
 
 	return response.BusBooking, response.Booking.BookingReference, nil
 }
@@ -982,7 +982,7 @@ func (s *BookingOrchestratorService) AddLoungeToIntent(
 
 	// Check if expired
 	if time.Now().After(intent.ExpiresAt) {
-		s.intentRepo.UpdateIntentExpired(intent.ID)
+		_ = s.intentRepo.UpdateIntentExpired(intent.ID)
 		return nil, fmt.Errorf("intent has expired")
 	}
 
