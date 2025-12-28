@@ -1,10 +1,11 @@
 package database
 
 import (
-	// "database/sql"
+	"database/sql"
 	"fmt"
-	"time"
 	"log"
+	"time"
+
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 	"github.com/smarttransit/sms-auth-backend/internal/models"
@@ -16,21 +17,21 @@ type LoungeDriverRepository struct {
 }
 
 // create a new lounge driver repository
-func NewLoungeDriverRepository(db *sqlx.DB) *LoungeDriverRepository{
+func NewLoungeDriverRepository(db *sqlx.DB) *LoungeDriverRepository {
 	return &LoungeDriverRepository{db: db}
 }
 
-// add drivers to the lounge 
-func (r *LoungeDriverRepository) AddDriver(driver *models.LoungeDriver)(*models.LoungeDriver,error){
+// add drivers to the lounge
+func (r *LoungeDriverRepository) AddDriver(driver *models.LoungeDriver) (*models.LoungeDriver, error) {
 
 	// setting auto-generated and default fields
-	driver.ID=uuid.New()
-	driver.CreatedAt=time.Now()
-	driver.UpdatedAt=time.Now()
+	driver.ID = uuid.New()
+	driver.CreatedAt = time.Now()
+	driver.UpdatedAt = time.Now()
 
 	if driver.Status == "" {
-        driver.Status = models.DriverStatusActive
-    }
+		driver.Status = models.DriverStatusActive
+	}
 
 	query := `
         INSERT INTO lounge_drivers (
@@ -40,7 +41,7 @@ func (r *LoungeDriverRepository) AddDriver(driver *models.LoungeDriver)(*models.
         RETURNING id, created_at, updated_at
     `
 
-	err:=r.db.QueryRowx(query,
+	err := r.db.QueryRowx(query,
 		driver.ID,
 		driver.LoungeID,
 		driver.Name,
@@ -51,13 +52,39 @@ func (r *LoungeDriverRepository) AddDriver(driver *models.LoungeDriver)(*models.
 		driver.Status,
 		driver.CreatedAt,
 		driver.UpdatedAt,
-	).Scan(&driver.ID,&driver.CreatedAt,&driver.UpdatedAt)
+	).Scan(&driver.ID, &driver.CreatedAt, &driver.UpdatedAt)
 
 	if err != nil {
-        log.Printf("ERROR: Failed to add driver for lounge %s: %v", driver.LoungeID, err)
-        return nil, fmt.Errorf("failed to add driver: %w", err)
-    }
+		log.Printf("ERROR: Failed to add driver for lounge %s: %v", driver.LoungeID, err)
+		return nil, fmt.Errorf("failed to add driver: %w", err)
+	}
 
-	return driver,nil
+	return driver, nil
 
+}
+
+// get drivers by the loungeID
+func (r *LoungeDriverRepository) GetDriverByLoungeID(loungeID uuid.UUID)([]models.LoungeDriver,error){
+
+	// creating a struct to hold the data
+	var drivers []models.LoungeDriver
+
+	query := `
+			SELECT *
+			FROM lounge_drivers
+			WHERE lounge_id = $1
+			ORDER BY created_at DESC`
+
+    // querying the database inorder to extract the drivers to a specific lounge
+	err:=r.db.Select(&drivers,query,loungeID)
+	// handling the NoRows error 
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err!=nil{
+		log.Printf("ERROR: Failed to get drivers for the lounge %s: %v",loungeID,err)
+		return nil,fmt.Errorf("failed to get drivers: %w",err)
+	}
+
+	return drivers,nil
 }

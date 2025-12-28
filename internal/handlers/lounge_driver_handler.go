@@ -145,3 +145,12 @@ func (h *LoungeDriverHandler) AddDriver(c *gin.Context) {
 	// if all good then sending statusCreated with the data struct for reference
 	c.JSON(http.StatusCreated, savedDriver)
 }
+
+
+// This handles all driver fetching parts according to loungeID
+
+func (h *LoungeDriverHandler) GetDriversByLounge(c *gin.Context){
+
+	// need to implement the handler
+
+}
