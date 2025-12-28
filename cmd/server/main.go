@@ -107,7 +107,7 @@ func main() {
 	loungeOwnerRepository := database.NewLoungeOwnerRepository(sqlxDB.DB)
 	loungeRepository := database.NewLoungeRepository(sqlxDB.DB)
 	loungeStaffRepository := database.NewLoungeStaffRepository(sqlxDB.DB)
-	//loungeDriverRepository := database.NewLoungeDriverRepository(sqlxDB.DB)
+	loungeDriverRepository := database.NewLoungeDriverRepository(sqlxDB.DB)
 	seatLayoutRepository := database.NewBusSeatLayoutRepository(sqlxDB.DB)
 
 	// Initialize staff service
@@ -216,6 +216,7 @@ func main() {
 	loungeRouteRepository := database.NewLoungeRouteRepository(sqlxDB.DB)
 	loungeHandler := handlers.NewLoungeHandler(loungeRepository, loungeOwnerRepository, loungeRouteRepository)
 	loungeStaffHandler := handlers.NewLoungeStaffHandler(loungeStaffRepository, loungeRepository, loungeOwnerRepository)
+	loungeDriverHandler := handlers.NewLoungeDriverHandler(loungeOwnerRepository, loungeRepository, loungeDriverRepository)
 
 	// Initialize lounge booking system
 	logger.Info("🏨 Initializing lounge booking system...")
@@ -575,6 +576,11 @@ func main() {
 				loungesProtected.POST("/:id/staff", loungeStaffHandler.AddStaff)
 				logger.Info("  ✅ GET /api/v1/lounges/:id/staff")
 				loungesProtected.GET("/:id/staff", loungeStaffHandler.GetStaffByLounge)
+
+				// driver manamegemnt for specific lounge (using the :id to match with the other lounge routes)
+				logger.Info(" ✅ POST /api/v1/lounges/:id/drivers")
+				loungesProtected.POST("/:id/drivers", loungeDriverHandler.AddDriver)
+
 				// Permission management moved to users.roles array - removed permission_type field
 				logger.Info("  ✅ PUT /api/v1/lounges/:id/staff/:staff_id/status")
 				loungesProtected.PUT("/:id/staff/:staff_id/status", loungeStaffHandler.UpdateStaffStatus)
@@ -615,6 +621,7 @@ func main() {
 			loungesProtectedProducts.GET("/:id/bookings", loungeBookingHandler.GetLoungeBookingsForOwner)
 			logger.Info("  ✅ GET /api/v1/lounges/:id/bookings/today (owner/staff)")
 			loungesProtectedProducts.GET("/:id/bookings/today", loungeBookingHandler.GetTodaysBookings)
+
 		}
 
 		// Lounge Bookings - Passenger endpoints
