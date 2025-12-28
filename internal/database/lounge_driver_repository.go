@@ -2,22 +2,62 @@ package database
 
 import (
 	// "database/sql"
-	// "fmt"
-	// "time"
-
-	// "github.com/google/uuid"
+	"fmt"
+	"time"
+	"log"
+	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
-	// "github.com/smarttransit/sms-auth-backend/internal/models"
+	"github.com/smarttransit/sms-auth-backend/internal/models"
 )
 
-
 // This handles the database operations for lounge driver
-type loungeDriverRepository struct {
+type LoungeDriverRepository struct {
 	db *sqlx.DB
 }
 
 // create a new lounge driver repository
-func NewLoungeDriverRepository(db *sqlx.DB) *loungeDriverRepository{
-	return &loungeDriverRepository{db:db}
+func NewLoungeDriverRepository(db *sqlx.DB) *LoungeDriverRepository{
+	return &LoungeDriverRepository{db: db}
 }
 
+// add drivers to the lounge 
+func (r *LoungeDriverRepository) AddDriver(driver *models.LoungeDriver)(*models.LoungeDriver,error){
+
+	// setting auto-generated and default fields
+	driver.ID=uuid.New()
+	driver.CreatedAt=time.Now()
+	driver.UpdatedAt=time.Now()
+
+	if driver.Status == "" {
+        driver.Status = models.DriverStatusActive
+    }
+
+	query := `
+        INSERT INTO lounge_drivers (
+            id, lounge_id, name, nic_number, contact_no,
+            vehicle_no, vehicle_type, status, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        RETURNING id, created_at, updated_at
+    `
+
+	err:=r.db.QueryRowx(query,
+		driver.ID,
+		driver.LoungeID,
+		driver.Name,
+		driver.NIC,
+		driver.ContactNumber,
+		driver.VehicleNumber,
+		driver.VehicleType,
+		driver.Status,
+		driver.CreatedAt,
+		driver.UpdatedAt,
+	).Scan(&driver.ID,&driver.CreatedAt,&driver.UpdatedAt)
+
+	if err != nil {
+        log.Printf("ERROR: Failed to add driver for lounge %s: %v", driver.LoungeID, err)
+        return nil, fmt.Errorf("failed to add driver: %w", err)
+    }
+
+	return driver,nil
+
+}

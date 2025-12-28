@@ -107,7 +107,7 @@ func main() {
 	loungeOwnerRepository := database.NewLoungeOwnerRepository(sqlxDB.DB)
 	loungeRepository := database.NewLoungeRepository(sqlxDB.DB)
 	loungeStaffRepository := database.NewLoungeStaffRepository(sqlxDB.DB)
-	//loungeDriverRepository :=database.NewLoungeDriverRepository(sqlxDB.DB)
+	//loungeDriverRepository := database.NewLoungeDriverRepository(sqlxDB.DB)
 	seatLayoutRepository := database.NewBusSeatLayoutRepository(sqlxDB.DB)
 
 	// Initialize staff service

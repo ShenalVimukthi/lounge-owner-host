@@ -35,6 +35,7 @@ func (r *LoungeRepository) CreateLounge(
 	amenities string,
 	images string,
 ) (*models.Lounge, error) {
+	
 	lounge := &models.Lounge{
 		ID:            uuid.New(),
 		LoungeOwnerID: loungeOwnerID,
