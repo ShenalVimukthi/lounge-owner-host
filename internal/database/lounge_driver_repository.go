@@ -88,3 +88,30 @@ func (r *LoungeDriverRepository) GetDriversByLoungeID(loungeID uuid.UUID)([]mode
 
 	return drivers,nil
 }
+
+// delete drivers by driverID
+func(r *LoungeDriverRepository) DeleteDriver(driverID uuid.UUID) (error){
+
+	query := 
+		   `DELETE FROM lounge_drivers
+		   WHERE id=$1`
+
+	// executing the delete query
+	result,err:=r.db.Exec(query,driverID)
+
+	if err!=nil {
+		log.Printf("ERROR: Failed to delete driver %s: %v", driverID, err)
+        return fmt.Errorf("failed to delete driver: %w", err)
+	}
+
+	// checking if any row actually affected
+	rowsAffected, _ := result.RowsAffected()
+
+	if rowsAffected == 0 {
+        return fmt.Errorf("driver not found: %s", driverID)
+    }
+
+	return nil
+
+
+}

@@ -42,7 +42,6 @@ type AddDriverRequest struct {
 }
 
 // adding drivers to the lounge
-
 func (h *LoungeDriverHandler) AddDriver(c *gin.Context) {
 	// creating the req struct instnace inorder to get the data inside the struct
 	var req AddDriverRequest
@@ -67,14 +66,7 @@ func (h *LoungeDriverHandler) AddDriver(c *gin.Context) {
 	}
 
 	// extracting the loungeID from the URL (also handling any errors)
-	loungeID, err := uuid.Parse(c.Param("id"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{
-			Error:   "invalid lounge_id",
-			Message: "Invalid lounge ID format",
-		})
-		return
-	}
+	loungeID := uuid.MustParse(c.Param("id"))
 
 	// get lounge owner record
 	owner, err := h.loungeOwnerRepo.GetLoungeOwnerByUserID(userCtx.UserID)
@@ -149,7 +141,6 @@ func (h *LoungeDriverHandler) AddDriver(c *gin.Context) {
 
 
 // This handles all driver fetching parts according to loungeID
-
 func (h *LoungeDriverHandler) GetDriversByLounge(c *gin.Context) {
 
 	// validating the user who is sending the request
@@ -163,15 +154,8 @@ func (h *LoungeDriverHandler) GetDriversByLounge(c *gin.Context) {
 	}
 
 	// getting the loungeID
-	loungeID,err:=uuid.Parse(c.Param("id"))
-	if err != nil{
-		c.JSON(http.StatusBadRequest,ErrorResponse{
-			Error: "invalid lounge_id",
-			Message: "Invalid lounge_ID format",
-		})
-		return
-	}
-
+	loungeID := uuid.MustParse(c.Param("id"))
+	
 	// extracting the lounge owner
 	owner, err := h.loungeOwnerRepo.GetLoungeOwnerByUserID(userCtx.UserID)
 	if err != nil {
@@ -254,3 +238,88 @@ func (h *LoungeDriverHandler) GetDriversByLounge(c *gin.Context) {
 
 
 }
+
+
+// This handles all the HTTP requests related to removing (permenently removing drivers from a specific lounge)
+func (h *LoungeDriverHandler) DeleteDriver(c *gin.Context){
+
+	// validating the user who is sending the request
+	userCtx, exists := middleware.GetUserContext(c)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{
+			Error:   "unauthorized",
+			Message: "User context not found",
+		})
+		return
+	}
+
+	// getting the loungeID 
+	loungeID := uuid.MustParse(c.Param("id"))
+	// getting the driverID
+	driverID := uuid.MustParse(c.Param("driver_id"))
+
+	// extracting the lounge owner
+	owner, err := h.loungeOwnerRepo.GetLoungeOwnerByUserID(userCtx.UserID)
+	if err != nil {
+		log.Printf("ERROR: Failed to get owner for user %s: %v", userCtx.UserID, err)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Error:   "database_error",
+			Message: "Failed to verify ownership",
+		})
+		return
+	}
+	if owner == nil {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{
+			Error:   "unauthorized",
+			Message: "Lounge owner not found",
+		})
+		return
+	}
+
+	//verifying the lounge ownership
+	lounge, err := h.loungeRepo.GetLoungeByID(loungeID)
+	if err != nil {
+		log.Printf("ERROR: Failed to get lounge %s: %v", loungeID, err)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Error:   "database_error",
+			Message: "Failed to verify lounge",
+		})
+		return
+	}
+	if lounge == nil {
+		c.JSON(http.StatusNotFound, ErrorResponse{
+			Error:   "not_found",
+			Message: "Lounge not found",
+		})
+		return
+	}
+	if lounge.LoungeOwnerID != owner.ID {
+		c.JSON(http.StatusForbidden, ErrorResponse{
+			Error:   "forbidden",
+			Message: "You don't have permission to get drivers in this lounge",
+		})
+		return
+	}
+
+	// extracting the driver by driverID
+	// this should be added with the driver validation will add soon 
+	// because need another function to check driver or get driver details by id
+	// that function is not implemented yet for now the delete functionality is added without checking if the driver is from the lounge 
+
+
+	// removing drivers by id
+	delErr := h.loungeDriverRepo.DeleteDriver(driverID)
+	if delErr!=nil {
+		log.Printf("ERROR: Failed to remove driver %s: %v", driverID, delErr)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Error:   "delete_failed",
+			Message: "failed to remove driver",
+		})
+		return
+	}
+
+	// success message
+	c.Status(http.StatusNoContent)
+
+}
+

@@ -583,6 +583,8 @@ func main() {
 				loungesProtected.POST("/:id/drivers", loungeDriverHandler.AddDriver)
 				logger.Info(" ✅ GET /api/v1/lounges/:id/drivers - GET DRIVERS IN A LOUNGE")
 				loungesProtected.GET("/:id/drivers",loungeDriverHandler.GetDriversByLounge)
+				logger.Info(" ✅ DELETE /api/v1/lounges/:id/drivers - DELETE DRIVERS IN A LOUNGE")
+				loungesProtected.DELETE("/:id/drivers/:driver_id",loungeDriverHandler.DeleteDriver)
 
 
 				// Permission management moved to users.roles array - removed permission_type field
