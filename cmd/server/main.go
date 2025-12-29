@@ -572,14 +572,18 @@ func main() {
 				loungesProtected.DELETE("/:id", loungeHandler.DeleteLounge)
 
 				// Staff management for specific lounge (use :id to match other lounge routes)
+				//there is a route missmatch in staff related functions will fix it soon
 				logger.Info("  ✅ POST /api/v1/lounges/:id/staff")
 				loungesProtected.POST("/:id/staff", loungeStaffHandler.AddStaff)
 				logger.Info("  ✅ GET /api/v1/lounges/:id/staff")
 				loungesProtected.GET("/:id/staff", loungeStaffHandler.GetStaffByLounge)
 
 				// driver manamegemnt for specific lounge (using the :id to match with the other lounge routes)
-				logger.Info(" ✅ POST /api/v1/lounges/:id/drivers")
+				logger.Info(" ✅ POST /api/v1/lounges/:id/drivers - ADD DRIVERS TO LOUNGE")
 				loungesProtected.POST("/:id/drivers", loungeDriverHandler.AddDriver)
+				logger.Info(" ✅ GET /api/v1/lounges/:id/drivers - GET DRIVERS IN A LOUNGE")
+				loungesProtected.GET("/:id/drivers",loungeDriverHandler.GetDriversByLounge)
+
 
 				// Permission management moved to users.roles array - removed permission_type field
 				logger.Info("  ✅ PUT /api/v1/lounges/:id/staff/:staff_id/status")

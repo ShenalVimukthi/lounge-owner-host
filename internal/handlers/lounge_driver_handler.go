@@ -147,10 +147,110 @@ func (h *LoungeDriverHandler) AddDriver(c *gin.Context) {
 }
 
 
+
 // This handles all driver fetching parts according to loungeID
 
-func (h *LoungeDriverHandler) GetDriversByLounge(c *gin.Context){
+func (h *LoungeDriverHandler) GetDriversByLounge(c *gin.Context) {
 
-	// need to implement the handler
+	// validating the user who is sending the request
+	userCtx, exists := middleware.GetUserContext(c)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{
+			Error:   "unauthorized",
+			Message: "User context not found",
+		})
+		return
+	}
+
+	// getting the loungeID
+	loungeID,err:=uuid.Parse(c.Param("id"))
+	if err != nil{
+		c.JSON(http.StatusBadRequest,ErrorResponse{
+			Error: "invalid lounge_id",
+			Message: "Invalid lounge_ID format",
+		})
+		return
+	}
+
+	// extracting the lounge owner
+	owner, err := h.loungeOwnerRepo.GetLoungeOwnerByUserID(userCtx.UserID)
+	if err != nil {
+		log.Printf("ERROR: Failed to get owner for user %s: %v", userCtx.UserID, err)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Error:   "database_error",
+			Message: "Failed to verify ownership",
+		})
+		return
+	}
+	if owner == nil {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{
+			Error:   "unauthorized",
+			Message: "Lounge owner not found",
+		})
+		return
+	}
+
+	//verifying the lounge ownership
+	lounge, err := h.loungeRepo.GetLoungeByID(loungeID)
+	if err != nil {
+		log.Printf("ERROR: Failed to get lounge %s: %v", loungeID, err)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Error:   "database_error",
+			Message: "Failed to verify lounge",
+		})
+		return
+	}
+	if lounge == nil {
+		c.JSON(http.StatusNotFound, ErrorResponse{
+			Error:   "not_found",
+			Message: "Lounge not found",
+		})
+		return
+	}
+	if lounge.LoungeOwnerID != owner.ID {
+		c.JSON(http.StatusForbidden, ErrorResponse{
+			Error:   "forbidden",
+			Message: "You don't have permission to get drivers in this lounge",
+		})
+		return
+	}
+
+	// getDrivers by loungeID with error handling
+	drivers, err := h.loungeDriverRepo.GetDriversByLoungeID(loungeID)
+	if err != nil {
+		log.Printf("ERROR: Failed to get drivers for lounge %s: %v", loungeID, err)
+		c.JSON(http.StatusInternalServerError,ErrorResponse{
+			Error:   "database_error",
+			Message: "Failed to retrieve drivers",
+		})
+		return
+	}
+
+	// converting the drivers list inorder to send back (setting the format)
+	response := make([]gin.H,0,len(drivers))
+
+	// looping and feeding the data
+	for _,s := range drivers{
+
+		response = append(response, gin.H{
+			"id" : s.ID,
+            "lounge_id" : s.LoungeID,
+			"name" : s.Name,
+			"nic" : s.NIC,
+			"contact_no" : s.ContactNumber,
+			"vehicle_no" : s.VehicleNumber,
+			"vehicle_type" : s.VehicleType,
+			"status" : s.Status,
+			"created_at" : s.CreatedAt,
+			"updated_at" : s.UpdatedAt,
+		})
+	}
+
+	// sending back the dataset with the length
+	c.JSON(http.StatusOK, gin.H{
+		"drivers": response,
+		"total": len(response),
+	})
+
 
 }

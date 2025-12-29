@@ -64,7 +64,7 @@ func (r *LoungeDriverRepository) AddDriver(driver *models.LoungeDriver) (*models
 }
 
 // get drivers by the loungeID
-func (r *LoungeDriverRepository) GetDriverByLoungeID(loungeID uuid.UUID)([]models.LoungeDriver,error){
+func (r *LoungeDriverRepository) GetDriversByLoungeID(loungeID uuid.UUID)([]models.LoungeDriver,error){
 
 	// creating a struct to hold the data
 	var drivers []models.LoungeDriver
