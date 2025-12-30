@@ -64,7 +64,7 @@ func (r *LoungeDriverRepository) AddDriver(driver *models.LoungeDriver) (*models
 }
 
 // get drivers by the loungeID
-func (r *LoungeDriverRepository) GetDriversByLoungeID(loungeID uuid.UUID)([]models.LoungeDriver,error){
+func (r *LoungeDriverRepository) GetDriversByLoungeID(loungeID uuid.UUID) ([]models.LoungeDriver, error) {
 
 	// creating a struct to hold the data
 	var drivers []models.LoungeDriver
@@ -75,43 +75,67 @@ func (r *LoungeDriverRepository) GetDriversByLoungeID(loungeID uuid.UUID)([]mode
 			WHERE lounge_id = $1
 			ORDER BY created_at DESC`
 
-    // querying the database inorder to extract the drivers to a specific lounge
-	err:=r.db.Select(&drivers,query,loungeID)
-	// handling the NoRows error 
+	// querying the database inorder to extract the drivers to a specific lounge
+	err := r.db.Select(&drivers, query, loungeID)
+	// handling the NoRows error
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
-	if err!=nil{
-		log.Printf("ERROR: Failed to get drivers for the lounge %s: %v",loungeID,err)
-		return nil,fmt.Errorf("failed to get drivers: %w",err)
+	if err != nil {
+		log.Printf("ERROR: Failed to get drivers for the lounge %s: %v", loungeID, err)
+		return nil, fmt.Errorf("failed to get drivers: %w", err)
 	}
 
-	return drivers,nil
+	return drivers, nil
+}
+
+// get lounge driver by driverID
+func (r *LoungeDriverRepository) GetDriverByID(driverID uuid.UUID) (*models.LoungeDriver, error) {
+
+	// creating the driver struct to hold data
+	var driver models.LoungeDriver
+
+	query := 
+			 `SELECT *
+			  FROM lounge_drivers
+			  WHERE id = $1`
+
+	// querying the database to get the driver
+	err := r.db.Get(&driver, query, driverID)
+	if err != nil {
+		log.Printf("ERROR: Failed to get driver %s: %v", driverID, err)
+		return nil, fmt.Errorf("failed to get driver: %w", err)
+	}
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+
+	// returning the driver data
+	return &driver, nil
 }
 
 // delete drivers by driverID
-func(r *LoungeDriverRepository) DeleteDriver(driverID uuid.UUID) (error){
+func (r *LoungeDriverRepository) DeleteDriver(driverID uuid.UUID) error {
 
-	query := 
-		   `DELETE FROM lounge_drivers
-		   WHERE id=$1`
+	query :=
+			`DELETE FROM lounge_drivers
+			 WHERE id=$1`
 
 	// executing the delete query
-	result,err:=r.db.Exec(query,driverID)
+	result, err := r.db.Exec(query, driverID)
 
-	if err!=nil {
+	if err != nil {
 		log.Printf("ERROR: Failed to delete driver %s: %v", driverID, err)
-        return fmt.Errorf("failed to delete driver: %w", err)
+		return fmt.Errorf("failed to delete driver: %w", err)
 	}
 
 	// checking if any row actually affected
 	rowsAffected, _ := result.RowsAffected()
 
 	if rowsAffected == 0 {
-        return fmt.Errorf("driver not found: %s", driverID)
-    }
+		return fmt.Errorf("driver not found: %s", driverID)
+	}
 
 	return nil
-
 
 }
