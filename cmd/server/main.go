@@ -583,9 +583,10 @@ func main() {
 				loungesProtected.POST("/:id/drivers", loungeDriverHandler.AddDriver)
 				logger.Info(" ✅ GET /api/v1/lounges/:id/drivers - GET DRIVERS IN A LOUNGE")
 				loungesProtected.GET("/:id/drivers",loungeDriverHandler.GetDriversByLounge)
-				logger.Info(" ✅ DELETE /api/v1/lounges/:id/drivers - DELETE DRIVERS IN A LOUNGE")
+				logger.Info(" ✅ DELETE /api/v1/lounges/:id/drivers/:driver_id - DELETE DRIVERS IN A LOUNGE")
 				loungesProtected.DELETE("/:id/drivers/:driver_id",loungeDriverHandler.DeleteDriver)
-
+				logger.Info(" ✅ PUT /api/v1/lounges/:id/drivers/:driver_id - UPDATE DRIVERS IN A LOUNGE")
+				loungesProtected.PUT("/:id/drivers/:driver_id",loungeDriverHandler.UpdateDriver)
 
 				// Permission management moved to users.roles array - removed permission_type field
 				logger.Info("  ✅ PUT /api/v1/lounges/:id/staff/:staff_id/status")

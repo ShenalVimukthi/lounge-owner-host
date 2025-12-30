@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 	"time"
-
+	"strings"
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 	"github.com/smarttransit/sms-auth-backend/internal/models"
@@ -137,5 +137,47 @@ func (r *LoungeDriverRepository) DeleteDriver(driverID uuid.UUID) error {
 	}
 
 	return nil
+
+}
+
+// update drivers using driverID
+func (r *LoungeDriverRepository) UpdateDriver(driverID uuid.UUID, updates map[string]interface{}) error{
+
+	// if no updates returning nil
+	if len(updates) == 0 {
+        return nil
+    }
+
+	// Build dynamic query
+    query := "UPDATE lounge_drivers SET "
+	var args []interface{}
+    var placeholders []string
+    argIndex := 1
+
+	// iterating through the values to append the key , value pairs
+	for column, value := range updates {
+        placeholders = append(placeholders, fmt.Sprintf("%s = $%d", column, argIndex))
+        args = append(args, value)
+        argIndex++
+    }
+
+	query += strings.Join(placeholders, ", ")
+    query += fmt.Sprintf(", updated_at = NOW() WHERE id = $%d", argIndex)
+    args = append(args, driverID)
+
+	// quarying the Database
+	result, err := r.db.Exec(query, args...)
+    if err != nil {
+        log.Printf("ERROR: Failed to update driver %s: %v", driverID, err)
+        return fmt.Errorf("failed to update driver: %w", err)
+    }
+
+	rows, _ := result.RowsAffected()
+    if rows == 0 {
+        return fmt.Errorf("driver not found: %s", driverID)
+    }
+
+    return nil
+    
 
 }
