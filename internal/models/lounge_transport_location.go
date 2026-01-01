@@ -13,7 +13,7 @@ type LoungeTransportLocation struct {
 	Location string `db:"location" json:"location"`
 
 	// LocationStatus defines the availability of a transport location
-	Status LocationStatus `db:"status" json:"status"`
+	Status LoungeTransportLocationStatus `db:"status" json:"status"`
 
 	// CreatedAt and UpdatedAt for the ease of maintenance
 	CreatedAt time.Time `db:"created_at" json:"created_at"`
@@ -22,9 +22,9 @@ type LoungeTransportLocation struct {
 }
 
 // creating location status ENUM
-type LocationStatus string 
+type LoungeTransportLocationStatus string 
 
 const (
-	LocationStatusActive LocationStatus = "active"
-	LocationStatusInactive LocationStatus = "inactive"
+	LoungeTransportLocationStatusActive LoungeTransportLocationStatus = "active"
+	LoungeTransportLocationStatusInactive LoungeTransportLocationStatus = "inactive"
 )
