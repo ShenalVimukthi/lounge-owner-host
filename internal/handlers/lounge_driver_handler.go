@@ -33,7 +33,7 @@ func NewLoungeDriverHandler(
 
 // add drivers to lounge
 type AddDriverRequest struct {
-	// getting user data to the struct by using binding for safety
+	// getting user data to the struct by using binding for safety(some editing neede to be done need to add lounge_id in frontend)
 	Name          string                   `json:"name" binding:"required,min=2,max=100"`
 	NIC           string                   `json:"nic_number" binding:"required"`
 	ContactNumber string                   `json:"contact_no" binding:"required"`
@@ -77,7 +77,7 @@ func (h *LoungeDriverHandler) AddDriver(c *gin.Context) {
 	}
 
 	// extracting the loungeID from the URL (also handling any errors)
-	loungeID := uuid.MustParse(c.Param("id"))
+	loungeID := uuid.MustParse(c.Param("id")) //this is not correct this will not pass loungeID it will pass the ownerID
 
 	// get lounge owner record
 	owner, err := h.loungeOwnerRepo.GetLoungeOwnerByUserID(userCtx.UserID)
