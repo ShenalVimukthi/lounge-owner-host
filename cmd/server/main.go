@@ -108,6 +108,7 @@ func main() {
 	loungeRepository := database.NewLoungeRepository(sqlxDB.DB)
 	loungeStaffRepository := database.NewLoungeStaffRepository(sqlxDB.DB)
 	loungeDriverRepository := database.NewLoungeDriverRepository(sqlxDB.DB)
+	loungeTransportLocationRepository:= database.NewLoungeTransportLocationRepository(sqlxDB.DB)
 	seatLayoutRepository := database.NewBusSeatLayoutRepository(sqlxDB.DB)
 
 	// Initialize staff service
@@ -210,13 +211,14 @@ func main() {
 	busOwnerRouteRepo := database.NewBusOwnerRouteRepository(db)
 	busOwnerRouteHandler := handlers.NewBusOwnerRouteHandler(busOwnerRouteRepo, ownerRepository)
 
-	// Initialize lounge owner, lounge, staff, and admin handlers
+	// Initialize lounge owner, lounge, staff, driver, transport location and admin handlers
 	logger.Info("🔍 DEBUG: Initializing lounge handlers...")
 	loungeOwnerHandler := handlers.NewLoungeOwnerHandler(loungeOwnerRepository, userRepository)
 	loungeRouteRepository := database.NewLoungeRouteRepository(sqlxDB.DB)
 	loungeHandler := handlers.NewLoungeHandler(loungeRepository, loungeOwnerRepository, loungeRouteRepository)
 	loungeStaffHandler := handlers.NewLoungeStaffHandler(loungeStaffRepository, loungeRepository, loungeOwnerRepository)
 	loungeDriverHandler := handlers.NewLoungeDriverHandler(loungeOwnerRepository, loungeRepository, loungeDriverRepository)
+	loungeTransportLocationHandler := handlers.NewLoungeTransportLocationHandler(loungeOwnerRepository,loungeRepository,loungeTransportLocationRepository)
 
 	// Initialize lounge booking system
 	logger.Info("🏨 Initializing lounge booking system...")
@@ -587,6 +589,15 @@ func main() {
 				loungesProtected.DELETE("/:id/drivers/:driver_id",loungeDriverHandler.DeleteDriver)
 				logger.Info(" ✅ PUT /api/v1/lounges/:id/drivers/:driver_id - update drivers in lounge")
 				loungesProtected.PUT("/:id/drivers/:driver_id",loungeDriverHandler.UpdateDriver)
+
+				// transport location management for specific lounge 
+				logger.Info(" ✅ POST /api/v1/lounges/:id/transport-locations - add transport location to lounge")
+				loungesProtected.POST("/:id/transport-locations",loungeTransportLocationHandler.AddLoungeTransportLocation)
+				// add get endpoint
+				// add delete endpoint 
+				// add put endpoint
+
+				// transport location price management for specific lounge
 
 				// Permission management moved to users.roles array - removed permission_type field
 				logger.Info("  ✅ PUT /api/v1/lounges/:id/staff/:staff_id/status")

@@ -2,15 +2,14 @@ package handlers
 
 import (
 
-	// "log"
+	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/smarttransit/sms-auth-backend/internal/database"
 	"github.com/smarttransit/sms-auth-backend/internal/middleware"
-
-
+	"github.com/smarttransit/sms-auth-backend/internal/models"
 )
 
 // LoungeTransportLocationHandler handles HTTP requests related to lounge transport locations
@@ -39,6 +38,8 @@ func NewLoungeTransportLocationHandler(
 
 type AddLoungeTransportLocationRequest struct{
 	Location string `json:"location" binding:"required"`
+	Latitude  float64 `json:"latitude" binding:"required"`
+    Longitude float64 `json:"longitude" binding:"required"`
 }
 
 
@@ -98,7 +99,34 @@ func (h *LoungeTransportLocationHandler) AddLoungeTransportLocation(c *gin.Conte
 		return
 	}
 
+	// converting the data into the feeding model
+	TransportLocation :=&models.LoungeTransportLocation{
+
+		LoungeID: loungeID,
+		Location: req.Location,
+		Latitude: req.Latitude,
+		Longitude: req.Longitude,
+
+	}
+
 	// // Add transport location to lounge
-	// AddedTransportLocation,err:= h.loungeTransportLocationRepo.AddTransportLocationToLounge()
+	createdLocation,err:= h.loungeTransportLocationRepo.AddTransportLocationToLounge(*TransportLocation)
+
+	// checking for errors
+	if err!= nil {
+		log.Printf("ERROR: Failed to add location \"%s\" for lounge  %s: %v",req.Location,loungeID.String(), err)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Error:   "add_failed",
+			Message: "Failed to add location",
+		})
+		return
+
+	}
+
+
+	// if all good then sending statusCreated with the data struct for reference
+	c.JSON(http.StatusCreated, createdLocation)
 
 }
+
+

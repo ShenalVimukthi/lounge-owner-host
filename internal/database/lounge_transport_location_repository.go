@@ -1,15 +1,16 @@
 package database
 
 import (
-	// "database/sql"
+	"database/sql"
 	"log"
 	"fmt"
 	"time"
-
+	"strings"
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 	// "github.com/pelletier/go-toml/query"
 	"github.com/smarttransit/sms-auth-backend/internal/models"
+
 )
 
 // Lounge Transport Location Repository handles database operations of lounge transport locations
@@ -58,4 +59,93 @@ func (r *LoungeTransportLocationRepository) AddTransportLocationToLounge(Transpo
 	// if okay sending the created transport location data
 	return &TransportLocation, nil
 
+}
+
+
+func (r *LoungeTransportLocationRepository) GetTransportLocationsByLoungeID(loungeID uuid.UUID)([]models.LoungeTransportLocation,error){
+
+	// creating a struct to hold the data
+	var loungeTransportLocations []models.LoungeTransportLocation
+
+	query := `SELECT * 
+			  FROM lounge_transport_locations 
+			  WHERE lounge_id = $1
+			  ORDER BY created_at DESC`
+	
+	// querying the database inorder to extract the lounge transport locations to a specific lounge
+	err := r.db.Select(&loungeTransportLocations,query,loungeID)
+	if err == sql.ErrNoRows{
+		return nil, nil
+	}
+	if err != nil{
+		log.Printf("ERROR: Failed to get transport locations for the lounge %s: %v", loungeID, err)
+		return nil, fmt.Errorf("failed to get locations: %w", err)
+	}
+
+	// if no error occured pass the data got
+	return loungeTransportLocations, nil
+}
+
+
+func (r *LoungeTransportLocationRepository) DeleteLoungeTransportLocationByID(locationID uuid.UUID) error{
+
+	query := `DELETE FROM lounge_transport_locations
+			  WHERE id = $1`
+
+	// executing delete query
+	result, err := r.db.Exec(query,locationID)
+
+	if err != nil {
+		log.Printf("ERROR: Failed to delete location %s: %v", locationID, err)
+		return fmt.Errorf("failed to delete location: %w", err)
+	}
+
+	// checking for rows affected
+	rowsAffected, _ := result.RowsAffected()
+
+	if rowsAffected == 0{
+		return fmt.Errorf("location not found: %s", locationID)
+	}
+
+
+	return nil
+}
+
+func (r *LoungeTransportLocationRepository) UpdateLoungeTransportLocationByID(locationID uuid.UUID, updates map[string]interface{}) error{
+
+	// if no updates returning nil
+	if len(updates) == 0 {
+        return nil
+    }
+
+	// Build dynamic query
+    query := "UPDATE lounge_transport_locations SET "
+	var args []interface{}
+    var placeholders []string
+    argIndex := 1
+
+	// iterating through the values to append the key , value pairs
+	for column, value := range updates {
+        placeholders = append(placeholders, fmt.Sprintf("%s = $%d", column, argIndex))
+        args = append(args, value)
+        argIndex++
+    }
+
+	query += strings.Join(placeholders, ", ")
+    query += fmt.Sprintf(", updated_at = NOW() WHERE id = $%d", argIndex)
+    args = append(args, locationID)
+
+	// quarying the Database
+	result, err := r.db.Exec(query, args...)
+    if err != nil {
+        log.Printf("ERROR: Failed to update transport location %s: %v", locationID, err)
+        return fmt.Errorf("failed to update location: %w", err)
+    }
+
+	rowsAffected, _ := result.RowsAffected()
+    if rowsAffected == 0 {
+        return fmt.Errorf("location not found: %s", locationID)
+    }
+
+	return nil
 }
