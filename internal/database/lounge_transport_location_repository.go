@@ -62,7 +62,30 @@ func (r *LoungeTransportLocationRepository) AddTransportLocationToLounge(Transpo
 }
 
 
-func (r *LoungeTransportLocationRepository) GetTransportLocationsByLoungeID(loungeID uuid.UUID)([]models.LoungeTransportLocation,error){
+func (r *LoungeTransportLocationRepository) GetLoungeTransportLocationByID(locationID uuid.UUID)(*models.LoungeTransportLocation,error){
+
+	// creating a var to store the location
+	var location models.LoungeTransportLocation
+
+	query := `SELECT *
+			  FROM lounge_transport_locations
+			  WHERE id = $1`
+	
+	// executing the data
+	err := r.db.Get(&location,query,locationID)
+	if err == sql.ErrNoRows{
+		return nil, nil
+	}
+	if err != nil {
+		log.Printf("ERROR: Failed to get transport location for id %s: %v", locationID, err)
+		return nil, fmt.Errorf("failed to get location: %w", err)
+	}
+
+	return &location, nil
+}
+
+
+func (r *LoungeTransportLocationRepository) GetLoungeTransportLocationsByLoungeID(loungeID uuid.UUID)([]models.LoungeTransportLocation,error){
 
 	// creating a struct to hold the data
 	var loungeTransportLocations []models.LoungeTransportLocation

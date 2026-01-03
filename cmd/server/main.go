@@ -634,18 +634,12 @@ func main() {
 			// Protected routes (require JWT authentication)
 			loungesProtected := lounges.Group("")
 			loungesProtected.Use(middleware.AuthMiddleware(jwtService))
-			{
+			{	
+				// lounge management for a specific lounge
 				logger.Info("  ✅ GET /api/v1/lounges/my-lounges (read-only, no approval needed)")
 				loungesProtected.GET("/my-lounges", loungeHandler.GetMyLounges)
 				logger.Info("  ✅ GET /api/v1/lounges/:id (read-only, no approval needed)")
 				loungesProtected.GET("/:id", loungeHandler.GetLoungeByID)
-
-				// Staff management for specific lounge (use :id to match other lounge routes)
-				//there is a route missmatch in staff related functions will fix it soon
-				logger.Info("  ✅ POST /api/v1/lounges/:id/staff")
-				loungesProtected.POST("/:id/staff", loungeStaffHandler.AddStaff)
-				logger.Info("  ✅ GET /api/v1/lounges/:id/staff")
-
 				// Write operations require approval
 				logger.Info("  ✅ PUT /api/v1/lounges/:id (requires approval)")
 				loungesProtected.PUT("/:id", middleware.RequireApprovedLoungeOwner(loungeOwnerRepository), loungeHandler.UpdateLounge)
@@ -653,35 +647,43 @@ func main() {
 				loungesProtected.DELETE("/:id", middleware.RequireApprovedLoungeOwner(loungeOwnerRepository), loungeHandler.DeleteLounge)
 
 				// Staff management for specific lounge (requires approval)
-				logger.Info("  ✅ POST /api/v1/lounges/:id/staff (requires approval)")
-				loungesProtected.POST("/:id/staff", middleware.RequireApprovedLoungeOwner(loungeOwnerRepository), loungeStaffHandler.AddStaff)
+				//there is a route missmatch in staff related functions will fix it soon
 				logger.Info("  ✅ GET /api/v1/lounges/:id/staff (read-only, no approval needed)")
 				loungesProtected.GET("/:id/staff", loungeStaffHandler.GetStaffByLounge)
-
-				// driver manamegemnt for specific lounge (using the :id to match with the other lounge routes)
-				logger.Info(" ✅ POST /api/v1/lounges/:id/drivers - add drivers to lounge")
-				loungesProtected.POST("/:id/drivers", loungeDriverHandler.AddDriver) // frontend body should be changed to take a lounge id input some backend editing also needed
-				logger.Info(" ✅ GET /api/v1/lounges/:id/drivers - get drivers in lounge")
-				loungesProtected.GET("/:id/drivers", loungeDriverHandler.GetDriversByLounge)
-				logger.Info(" ✅ DELETE /api/v1/lounges/:id/drivers/:driver_id - delete drivers in lounge")
-				loungesProtected.DELETE("/:id/drivers/:driver_id", loungeDriverHandler.DeleteDriver)
-				logger.Info(" ✅ PUT /api/v1/lounges/:id/drivers/:driver_id - update drivers in lounge")
-				loungesProtected.PUT("/:id/drivers/:driver_id", loungeDriverHandler.UpdateDriver)
-
-				// transport location management for specific lounge
-				logger.Info(" ✅ POST /api/v1/lounges/:id/transport-locations - add transport location to lounge")
-				loungesProtected.POST("/:id/transport-locations", loungeTransportLocationHandler.AddLoungeTransportLocation)
-				// add get endpoint
-				// add delete endpoint
-				// add put endpoint
-
-				// transport location price management for specific lounge
-
+				logger.Info("  ✅ POST /api/v1/lounges/:id/staff (requires approval)")
+				loungesProtected.POST("/:id/staff", middleware.RequireApprovedLoungeOwner(loungeOwnerRepository), loungeStaffHandler.AddStaff)
 				// Permission management moved to users.roles array - removed permission_type field
 				logger.Info("  ✅ PUT /api/v1/lounges/:id/staff/:staff_id/status (requires approval)")
 				loungesProtected.PUT("/:id/staff/:staff_id/status", middleware.RequireApprovedLoungeOwner(loungeOwnerRepository), loungeStaffHandler.UpdateStaffStatus)
 				logger.Info("  ✅ DELETE /api/v1/lounges/:id/staff/:staff_id (requires approval)")
 				loungesProtected.DELETE("/:id/staff/:staff_id", middleware.RequireApprovedLoungeOwner(loungeOwnerRepository), loungeStaffHandler.RemoveStaff)
+
+
+				// driver manamegemnt for specific lounge (using the :id to match with the other lounge routes)
+				logger.Info(" ✅ GET /api/v1/lounges/:id/drivers - get drivers in lounge (read-only, no approval needed)")
+				loungesProtected.GET("/:id/drivers", loungeDriverHandler.GetDriversByLounge)
+				logger.Info(" ✅ POST /api/v1/lounges/:id/drivers - add drivers to lounge (requires approval)")// frontend body should be changed to take a lounge id input some backend editing also needed
+				loungesProtected.POST("/:id/drivers", middleware.RequireApprovedLoungeOwner(loungeOwnerRepository), loungeDriverHandler.AddDriver)
+				logger.Info(" ✅ PUT /api/v1/lounges/:id/drivers/:driver_id - update drivers in lounge (requires approval)")
+				loungesProtected.PUT("/:id/drivers/:driver_id", middleware.RequireApprovedLoungeOwner(loungeOwnerRepository), loungeDriverHandler.UpdateDriver) 
+				logger.Info(" ✅ DELETE /api/v1/lounges/:id/drivers/:driver_id - delete drivers in lounge (requires approval)")
+				loungesProtected.DELETE("/:id/drivers/:driver_id", middleware.RequireApprovedLoungeOwner(loungeOwnerRepository), loungeDriverHandler.DeleteDriver)
+	
+
+				// transport location management for specific lounge
+				logger.Info(" ✅ GET /api/v1/lounges/:id/transport-locations - get transport locations in lounge (read-only, no approval needed)")
+				loungesProtected.GET("/:id/transport-locations",loungeTransportLocationHandler.GetLoungeTransportLocationsByLoungeID)
+				logger.Info(" ✅ POST /api/v1/lounges/:id/transport-locations - add transport location to lounge (requires approval)")
+				loungesProtected.POST("/:id/transport-locations",middleware.RequireApprovedLoungeOwner(loungeOwnerRepository),loungeTransportLocationHandler.AddLoungeTransportLocation)
+				logger.Info(" ✅ PUT /api/v1/lounges/:id/transport-locations/:location_id - update transport locations in lounge (requires approval)")
+				loungesProtected.PUT("/:id/transport-locations/:location_id",middleware.RequireApprovedLoungeOwner(loungeOwnerRepository),loungeTransportLocationHandler.UpdateLoungeTransportLocationByID)
+				logger.Info(" ✅ DELETE /api/v1/lounges/:id/transport-locations/:location_id - delete transport locations in lounge (requires approval)")
+				loungesProtected.DELETE("/:id/transport-locations/:location_id",middleware.RequireApprovedLoungeOwner(loungeOwnerRepository),loungeTransportLocationHandler.DeleteLoungeTransportLocationByID)
+				
+
+				// transport location price management for specific lounge
+
+				
 			}
 		}
 		logger.Info("� Lounge routes registered successfully")
