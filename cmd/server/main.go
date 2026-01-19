@@ -109,6 +109,7 @@ func main() {
 	loungeStaffRepository := database.NewLoungeStaffRepository(sqlxDB.DB)
 	loungeDriverRepository := database.NewLoungeDriverRepository(sqlxDB.DB)
 	loungeTransportLocationRepository := database.NewLoungeTransportLocationRepository(sqlxDB.DB)
+	loungeTransportLocationPriceRepository := database.NewLoungeTransportLocationPriceRepository(sqlxDB.DB)
 	seatLayoutRepository := database.NewBusSeatLayoutRepository(sqlxDB.DB)
 
 	// Initialize staff service
@@ -232,7 +233,7 @@ func main() {
 	busOwnerRouteRepo := database.NewBusOwnerRouteRepository(db)
 	busOwnerRouteHandler := handlers.NewBusOwnerRouteHandler(busOwnerRouteRepo, ownerRepository)
 
-	// Initialize lounge owner, lounge, staff, driver, transport location and admin handlers
+	// Initialize lounge owner, lounge, staff, lounge driver, lounge transport location, lounge tranport location price and admin handlers
 	logger.Info("🔍 DEBUG: Initializing lounge handlers...")
 	loungeOwnerHandler := handlers.NewLoungeOwnerHandler(loungeOwnerRepository, userRepository)
 	loungeRouteRepository := database.NewLoungeRouteRepository(sqlxDB.DB)
@@ -240,6 +241,7 @@ func main() {
 	loungeStaffHandler := handlers.NewLoungeStaffHandler(loungeStaffRepository, loungeRepository, loungeOwnerRepository)
 	loungeDriverHandler := handlers.NewLoungeDriverHandler(loungeOwnerRepository, loungeRepository, loungeDriverRepository)
 	loungeTransportLocationHandler := handlers.NewLoungeTransportLocationHandler(loungeOwnerRepository, loungeRepository, loungeTransportLocationRepository)
+	loungeTransportLocationPriceHandler := handlers.NewLoungeTransportLocationPriceHandler(loungeOwnerRepository,loungeRepository,loungeTransportLocationRepository,loungeTransportLocationPriceRepository)
 
 	// Initialize lounge booking system
 	logger.Info("🏨 Initializing lounge booking system...")
@@ -462,14 +464,19 @@ func main() {
 		{
 			auth.POST("/send-otp", authHandler.SendOTP)
 			auth.POST("/verify-otp", authHandler.VerifyOTP)
-			auth.POST("/verify-otp-staff", authHandler.VerifyOTPStaff) // Staff-specific endpoint
+			auth.POST("/verify-otp-staff", authHandler.VerifyOTPStaff)
+			// lounge_owner_specific routes
 			auth.POST("/verify-otp-lounge-owner", func(c *gin.Context) {
 				authHandler.VerifyOTPLoungeOwner(c, loungeOwnerRepository)
-			}) // Lounge owner-specific endpoint
+			})
+			// lounge_staff_specific routes
+			auth.POST("/verify-otp-lounge-staff", func(c *gin.Context) {
+   		        authHandler.VerifyOTPLoungeStaff(c, loungeStaffRepository)
+			})
+			// Lounge owner-specific endpoint
 			auth.GET("/otp-status/:phone", authHandler.GetOTPStatus)
 			auth.POST("/refresh-token", authHandler.RefreshToken)
-			auth.POST("/refresh", authHandler.RefreshToken) // Alias for mobile compatibility
-
+			auth.POST("/refresh", authHandler.RefreshToken) // Alias for mobile compatibility	
 			// Protected routes (require JWT authentication)
 			protected := auth.Group("")
 			protected.Use(middleware.AuthMiddleware(jwtService))
@@ -668,7 +675,7 @@ func main() {
 				logger.Info(" ✅ DELETE /api/v1/lounges/:id/drivers/:driver_id - delete drivers in lounge (requires approval)")
 				loungesProtected.DELETE("/:id/drivers/:driver_id", middleware.RequireApprovedLoungeOwner(loungeOwnerRepository), loungeDriverHandler.DeleteDriver)
 
-				// transport location management for specific lounge
+				// transport location management for specific lounge(:id = lounge_id)
 				logger.Info(" ✅ GET /api/v1/lounges/:id/transport-locations - get transport locations in lounge (read-only, no approval needed)")
 				loungesProtected.GET("/:id/transport-locations", loungeTransportLocationHandler.GetLoungeTransportLocationsByLoungeID)
 				logger.Info(" ✅ POST /api/v1/lounges/:id/transport-locations - add transport location to lounge (requires approval)")
@@ -677,9 +684,12 @@ func main() {
 				loungesProtected.PUT("/:id/transport-locations/:location_id", middleware.RequireApprovedLoungeOwner(loungeOwnerRepository), loungeTransportLocationHandler.UpdateLoungeTransportLocationByID)
 				logger.Info(" ✅ DELETE /api/v1/lounges/:id/transport-locations/:location_id - delete transport locations in lounge (requires approval)")
 				loungesProtected.DELETE("/:id/transport-locations/:location_id", middleware.RequireApprovedLoungeOwner(loungeOwnerRepository), loungeTransportLocationHandler.DeleteLoungeTransportLocationByID)
-				
+
 				// transport location price management for specific lounge
 				logger.Info(" ✅ GET /api/v1/lounges/:id/transport-locations/:location_id/prices - get transport location prices in lounge (read-only, no approval needed)")
+				loungesProtected.GET("/:id/transport-locations/:location_id/prices",loungeTransportLocationPriceHandler.GetLoungeTransportLocationPrices)
+				logger.Info(" ✅ POST /api/v1/lounges/:id/transport-locations/:location_id/prices - set transport location prices in lounge (requires approval)")
+				loungesProtected.POST("/:id/transport-locations/:location_id/prices",middleware.RequireApprovedLoungeOwner(loungeOwnerRepository),loungeTransportLocationPriceHandler.SetLoungeTransportLocationPrices)
 
 			}
 		}

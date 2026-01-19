@@ -20,7 +20,67 @@ func NewLoungeStaffRepository(db *sqlx.DB) *LoungeStaffRepository {
 	return &LoungeStaffRepository{db: db}
 }
 
-// AddStaffToLounge adds a staff member to a lounge (owner invites staff)
+// NEW ADDITION inoder to add_staff record
+func (r *LoungeStaffRepository) CreateLoungeStaff(userID uuid.UUID)(*models.LoungeStaff,error){
+	return nil, nil
+}
+
+// NEW METHOD TO ADD COMPLETE STAFF DETAILS (THE OLD WAS LEFT TO BACKEND COMPATABILITY)
+func (r *LoungeStaffRepository) AddStaffToLoungeWithCompleteData(
+	loungeID uuid.UUID,
+    userID uuid.UUID,
+	employmentStatus string,
+    fullName string,
+    nicNumber string,
+    email string,
+)(*models.LoungeStaff,error){
+
+	// feeding data into the variable
+	 staff := &models.LoungeStaff{
+        ID:               uuid.New(),
+        LoungeID:         loungeID,
+        UserID:           userID,
+        FullName:         sql.NullString{String: fullName, Valid: fullName != ""},
+        NICNumber:        sql.NullString{String: nicNumber, Valid: nicNumber != ""},
+        Email:            sql.NullString{String: email, Valid: email != ""},
+        ProfileCompleted: true, // Set to true since all data is provided
+        EmploymentStatus: models.LoungeStaffEmploymentStatus(employmentStatus),
+        CreatedAt:        time.Now(),
+        UpdatedAt:        time.Now(),
+    }
+
+	// database query
+	query := `
+        INSERT INTO lounge_staff (
+            id, lounge_id, user_id, full_name, nic_number, email,
+            profile_completed, employment_status, created_at, updated_at
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        RETURNING id, created_at, updated_at
+    `
+
+	err := r.db.QueryRowx(
+        query,
+        staff.ID,
+        loungeID,
+        userID,
+        staff.FullName,
+        staff.NICNumber,
+        staff.Email,
+        staff.ProfileCompleted,
+        staff.EmploymentStatus,
+        staff.CreatedAt,
+        staff.UpdatedAt,
+    ).Scan(&staff.ID, &staff.CreatedAt, &staff.UpdatedAt)
+
+	if err != nil {
+        return nil, fmt.Errorf("failed to add staff: %w", err)
+    }
+
+    return staff, nil
+}
+
+// AddStaffToLounge adds a staff member to a lounge (staff is only approved by lounge owner - NO INVITATION)
 func (r *LoungeStaffRepository) AddStaffToLounge(
 	loungeID uuid.UUID,
 	userID uuid.UUID,
@@ -105,7 +165,7 @@ func (r *LoungeStaffRepository) GetStaffByUserID(userID uuid.UUID) (*models.Loun
 	}
 	return &staff, nil
 }
-
+// this must be work with update of user table paralalley 
 // UpdateStaffProfile updates staff profile information when they complete registration
 func (r *LoungeStaffRepository) UpdateStaffProfile(
 	userID uuid.UUID,

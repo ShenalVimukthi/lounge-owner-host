@@ -113,6 +113,7 @@ func (r *UserRepository) CreateUserWithRole(phone string, role string) (*models.
 		"conductor":    true,
 		"bus_owner":    true,
 		"lounge_owner": true,
+		"lounge_staff": true,//new addition 
 		"admin":        true,
 	}
 

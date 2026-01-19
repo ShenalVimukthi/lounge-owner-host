@@ -40,12 +40,12 @@ type AddStaffRequest struct {
 	Phone    string `json:"phone" binding:"required"` // Staff's phone number
 }
 
-// AddStaff handles POST /api/v1/lounges/:lounge_id/staff
-// Owner invites staff by phone number
+// AddStaff handles POST /api/v1/lounges/:id/:lounge_id/staff == edited added lounge_id here
+// Owner approve staff requests and make staff employement status to approved which is originally pending => (SO NO IMPLEMENTATION HERE TO ADD STAFF)
 func (h *LoungeStaffHandler) AddStaff(c *gin.Context) {
 	c.JSON(http.StatusNotImplemented, ErrorResponse{
-		Error:   "not_implemented",
-		Message: "Staff invitation feature not yet implemented",
+		Error:   "no implementation in this handler ",
+		Message: "Staff invitation feature is not using now",
 	})
 }
 
