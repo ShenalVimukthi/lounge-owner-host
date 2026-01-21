@@ -39,6 +39,8 @@ type AddDriverRequest struct {
 	ContactNumber string                   `json:"contact_no" binding:"required"`
 	VehicleNumber string                   `json:"vehicle_no" binding:"required"`
 	VehicleType   models.DriverVehicleType `json:"vehicle_type" binding:"required,oneof=three_wheeler car van"`
+	// NEWLY ADDED LoungeID (ID is coming from the frontend the owner will select it so no parsing of loungeID in request)
+	LoungeID      uuid.UUID                `json:"lounge_id" binding:"required"`
 }
 
 // update drivers in the lounge
@@ -54,7 +56,7 @@ type UpdateDriverRequest struct{
 
 // adding drivers to the lounge
 func (h *LoungeDriverHandler) AddDriver(c *gin.Context) {
-	// creating the req struct instnace inorder to get the data inside the struct
+	// creating the req struct instance inorder to get the data inside the struct
 	var req AddDriverRequest
 
 	// binding the request to the struct if error comes returning the error
@@ -76,9 +78,6 @@ func (h *LoungeDriverHandler) AddDriver(c *gin.Context) {
 		return
 	}
 
-	// extracting the loungeID from the URL (also handling any errors)
-	loungeID := uuid.MustParse(c.Param("id")) //this is not correct this will not pass loungeID it will pass the ownerID
-
 	// get lounge owner record
 	owner, err := h.loungeOwnerRepo.GetLoungeOwnerByUserID(userCtx.UserID)
 	if err != nil {
@@ -87,6 +86,7 @@ func (h *LoungeDriverHandler) AddDriver(c *gin.Context) {
 			Error:   "database_error",
 			Message: "Failed to verify ownership",
 		})
+		return
 	}
 	if owner == nil {
 		c.JSON(http.StatusUnauthorized, ErrorResponse{
@@ -96,10 +96,10 @@ func (h *LoungeDriverHandler) AddDriver(c *gin.Context) {
 		return
 	}
 
-	// verify lounge ownership
-	lounge, err := h.loungeRepo.GetLoungeByID(loungeID)
+	// verify lounge ownership using LoungeID from request only
+	lounge, err := h.loungeRepo.GetLoungeByID(req.LoungeID)
 	if err != nil {
-		log.Printf("ERROR: Failed to get lounge %s: %v", loungeID, err)
+		log.Printf("ERROR: Failed to get lounge %s: %v", req.LoungeID, err)
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Error:   "database_error",
 			Message: "Failed to verify lounge",
@@ -123,7 +123,7 @@ func (h *LoungeDriverHandler) AddDriver(c *gin.Context) {
 
 	// converting the data into the model to feed into repository function
 	driver := &models.LoungeDriver{
-		LoungeID:      loungeID,
+		LoungeID:      req.LoungeID,
 		Name:          req.Name,
 		NIC:           req.NIC,
 		ContactNumber: req.ContactNumber,
@@ -137,7 +137,7 @@ func (h *LoungeDriverHandler) AddDriver(c *gin.Context) {
 
 	// handling the errors gracefully
 	if err != nil {
-		log.Printf("ERROR: Failed to add driver for lounge %s: %v", loungeID, err)
+		log.Printf("ERROR: Failed to add driver for lounge %s: %v", req.LoungeID, err)
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Error:   "add_failed",
 			Message: "Failed to add driver",

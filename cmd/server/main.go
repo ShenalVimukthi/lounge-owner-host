@@ -202,6 +202,7 @@ func main() {
 		userSessionRepository,
 		smsGateway,
 		cfg,
+		loungeRepository,
 	)
 
 	// Initialize staff handler
@@ -235,7 +236,7 @@ func main() {
 
 	// Initialize lounge owner, lounge, staff, lounge driver, lounge transport location, lounge tranport location price and admin handlers
 	logger.Info("🔍 DEBUG: Initializing lounge handlers...")
-	loungeOwnerHandler := handlers.NewLoungeOwnerHandler(loungeOwnerRepository, userRepository)
+	loungeOwnerHandler := handlers.NewLoungeOwnerHandler(loungeOwnerRepository, userRepository,loungeRepository)//added lounge repository new
 	loungeRouteRepository := database.NewLoungeRouteRepository(sqlxDB.DB)
 	loungeHandler := handlers.NewLoungeHandler(loungeRepository, loungeOwnerRepository, loungeRouteRepository)
 	loungeStaffHandler := handlers.NewLoungeStaffHandler(loungeStaffRepository, loungeRepository, loungeOwnerRepository)
@@ -604,21 +605,30 @@ func main() {
 		// Lounge Owner routes (all protected)
 		logger.Info("🏢 Registering Lounge Owner routes...")
 		loungeOwner := v1.Group("/lounge-owner")
-		loungeOwner.Use(middleware.AuthMiddleware(jwtService))
-		{
-			// Registration endpoints (no verification needed - for registration flow)
-			logger.Info("  ✅ POST /api/v1/lounge-owner/register/business-info")
-			loungeOwner.POST("/register/business-info", loungeOwnerHandler.SaveBusinessAndManagerInfo)
-			logger.Info("  ✅ POST /api/v1/lounge-owner/register/upload-manager-nic")
-			loungeOwner.POST("/register/upload-manager-nic", loungeOwnerHandler.UploadManagerNIC)
-			logger.Info("  ✅ POST /api/v1/lounge-owner/register/add-lounge (requires approval)")
-			loungeOwner.POST("/register/add-lounge", middleware.RequireApprovedLoungeOwner(loungeOwnerRepository), loungeHandler.AddLounge)
-			logger.Info("  ✅ GET /api/v1/lounge-owner/registration/progress")
-			loungeOwner.GET("/registration/progress", loungeOwnerHandler.GetRegistrationProgress)
+		{	
+			// public lounge owner endpoints (for staff registering and lounge selection parts )
+			loungeOwner.GET("/approved", loungeOwnerHandler.GetApprovedLoungeOwners)
+			loungeOwner.GET("/approved/grouped-by-province", loungeOwnerHandler.GetApprovedLoungeOwnersByProvince)
+			loungeOwner.GET("/:owner_id/lounges", loungeOwnerHandler.GetLoungesByOwnerID)
+			
+			// Protected routes (require JWT authentication)
+			loungeOwner.Use(middleware.AuthMiddleware(jwtService))
+			{
+				// Registration endpoints (no verification needed - for registration flow)
+				logger.Info("  ✅ POST /api/v1/lounge-owner/register/business-info")
+				loungeOwner.POST("/register/business-info", loungeOwnerHandler.SaveBusinessAndManagerInfo)
+				logger.Info("  ✅ POST /api/v1/lounge-owner/register/upload-manager-nic")
+				loungeOwner.POST("/register/upload-manager-nic", loungeOwnerHandler.UploadManagerNIC)
+				logger.Info("  ✅ POST /api/v1/lounge-owner/register/add-lounge (requires approval)")
+				loungeOwner.POST("/register/add-lounge", middleware.RequireApprovedLoungeOwner(loungeOwnerRepository), loungeHandler.AddLounge)
+				logger.Info("  ✅ GET /api/v1/lounge-owner/registration/progress")
+				loungeOwner.GET("/registration/progress", loungeOwnerHandler.GetRegistrationProgress)
 
-			// Profile endpoints
-			logger.Info("  ✅ GET /api/v1/lounge-owner/profile")
-			loungeOwner.GET("/profile", loungeOwnerHandler.GetProfile)
+				// Profile endpoints
+				logger.Info("  ✅ GET /api/v1/lounge-owner/profile")
+				loungeOwner.GET("/profile", loungeOwnerHandler.GetProfile)
+			}
+
 		}
 		logger.Info("🏢 Lounge Owner routes registered successfully")
 
@@ -668,8 +678,8 @@ func main() {
 				// driver manamegemnt for specific lounge (using the :id to match with the other lounge routes)
 				logger.Info(" ✅ GET /api/v1/lounges/:id/drivers - get drivers in lounge (read-only, no approval needed)")
 				loungesProtected.GET("/:id/drivers", loungeDriverHandler.GetDriversByLounge)
-				logger.Info(" ✅ POST /api/v1/lounges/:id/drivers - add drivers to lounge (requires approval)") // frontend body should be changed to take a lounge id input some backend editing also needed
-				loungesProtected.POST("/:id/drivers", middleware.RequireApprovedLoungeOwner(loungeOwnerRepository), loungeDriverHandler.AddDriver)
+				logger.Info(" ✅ POST /api/v1/lounges/drivers - add drivers to lounge (requires approval)")
+				loungesProtected.POST("/drivers", middleware.RequireApprovedLoungeOwner(loungeOwnerRepository), loungeDriverHandler.AddDriver)
 				logger.Info(" ✅ PUT /api/v1/lounges/:id/drivers/:driver_id - update drivers in lounge (requires approval)")
 				loungesProtected.PUT("/:id/drivers/:driver_id", middleware.RequireApprovedLoungeOwner(loungeOwnerRepository), loungeDriverHandler.UpdateDriver)
 				logger.Info(" ✅ DELETE /api/v1/lounges/:id/drivers/:driver_id - delete drivers in lounge (requires approval)")
@@ -678,8 +688,8 @@ func main() {
 				// transport location management for specific lounge(:id = lounge_id)
 				logger.Info(" ✅ GET /api/v1/lounges/:id/transport-locations - get transport locations in lounge (read-only, no approval needed)")
 				loungesProtected.GET("/:id/transport-locations", loungeTransportLocationHandler.GetLoungeTransportLocationsByLoungeID)
-				logger.Info(" ✅ POST /api/v1/lounges/:id/transport-locations - add transport location to lounge (requires approval)")
-				loungesProtected.POST("/:id/transport-locations", middleware.RequireApprovedLoungeOwner(loungeOwnerRepository), loungeTransportLocationHandler.AddLoungeTransportLocation)
+				logger.Info(" ✅ POST /api/v1/lounges/transport-locations - add transport location to lounge (requires approval)")
+				loungesProtected.POST("/transport-locations", middleware.RequireApprovedLoungeOwner(loungeOwnerRepository), loungeTransportLocationHandler.AddLoungeTransportLocation)
 				logger.Info(" ✅ PUT /api/v1/lounges/:id/transport-locations/:location_id - update transport locations in lounge (requires approval)")
 				loungesProtected.PUT("/:id/transport-locations/:location_id", middleware.RequireApprovedLoungeOwner(loungeOwnerRepository), loungeTransportLocationHandler.UpdateLoungeTransportLocationByID)
 				logger.Info(" ✅ DELETE /api/v1/lounges/:id/transport-locations/:location_id - delete transport locations in lounge (requires approval)")

@@ -396,3 +396,49 @@ func (r *LoungeOwnerRepository) GetStaffCount(ownerID uuid.UUID) (int, error) {
 	}
 	return count, nil
 }
+
+// get the approved lounge owners (for public display in the main parts when selecting the user roles )
+func (r *LoungeOwnerRepository) GetApprovedLoungeOwners()([]models.LoungeOwner,error){
+	var owners []models.LoungeOwner
+
+	query := `
+		SELECT * FROM lounge_owners
+		WHERE verification_status = 'approved'
+		ORDER BY business_name ASC
+		`
+	err := r.db.Select(&owners, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get approved lounge owners: %w", err)
+	}
+
+	
+	return owners,nil
+}
+
+// get lounge owners by the province filter by province
+func (r *LoungeOwnerRepository) GetApprovedLoungeOwnersByProvince()(map[string][]models.LoungeOwner,error){
+
+	var owners []models.LoungeOwner
+
+	query :=`
+			SELECT * FROM lounge_owners
+			WHERE verification_status = 'approved'
+			ORDER BY province ASC, business_name ASC
+			`
+	err := r.db.Select(&owners, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get approved lounge owners: %w", err)
+	}
+
+	// Group owners by province
+	provinceGroups := make(map[string][]models.LoungeOwner)
+	for _, owner := range owners {
+		province := owner.Province // Assumes Province field exists in LoungeOwner model
+		if province == "" {
+			province = "Other" // Default for owners without province
+		}
+		provinceGroups[province] = append(provinceGroups[province], owner)
+	}
+
+	return provinceGroups, nil
+}

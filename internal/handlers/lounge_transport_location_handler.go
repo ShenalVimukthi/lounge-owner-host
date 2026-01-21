@@ -1,10 +1,9 @@
 package handlers
 
 import (
-
+	
 	"log"
 	"net/http"
-
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/smarttransit/sms-auth-backend/internal/database"
@@ -13,12 +12,10 @@ import (
 )
 
 // LoungeTransportLocationHandler handles HTTP requests related to lounge transport locations
-type LoungeTransportLocationHandler struct{
-
-	loungeOwnerRepo *database.LoungeOwnerRepository
-	loungeRepo *database.LoungeRepository
+type LoungeTransportLocationHandler struct {
+	loungeOwnerRepo             *database.LoungeOwnerRepository
+	loungeRepo                  *database.LoungeRepository
 	loungeTransportLocationRepo *database.LoungeTransportLocationRepository
-
 }
 
 // NewLoungeTransportLocationHandler creates new lounge transport location handler
@@ -28,36 +25,37 @@ func NewLoungeTransportLocationHandler(
 	loungeRepo *database.LoungeRepository,
 	loungeTransportLocationRepo *database.LoungeTransportLocationRepository,
 
-) *LoungeTransportLocationHandler{
+) *LoungeTransportLocationHandler {
 	return &LoungeTransportLocationHandler{
-		loungeOwnerRepo: loungeOwnerRepo,
-		loungeRepo: loungeRepo,
+		loungeOwnerRepo:             loungeOwnerRepo,
+		loungeRepo:                  loungeRepo,
 		loungeTransportLocationRepo: loungeTransportLocationRepo,
 	}
 }
 
-type AddLoungeTransportLocationRequest struct{
-	Location string `json:"location" binding:"required,min=2,max=200"`
+type AddLoungeTransportLocationRequest struct {
+	Location  string  `json:"location" binding:"required,min=2,max=200"`
 	Latitude  float64 `json:"latitude" binding:"required,gte=-90,lte=90"`
-    Longitude float64 `json:"longitude" binding:"required,gte=-180,lte=180"`
+	Longitude float64 `json:"longitude" binding:"required,gte=-180,lte=180"`
+	// NEWLY ADDED ROWS TO GET LoungeID from the request itself
+	LoungeID uuid.UUID `json:"lounge_id" binding:"required"`
 }
 
-type UpdateLoungeTransportLocationRequest struct{
-	Location *string `json:"location" binding:"omitempty,min=2,max=200"`
-	Latitude *float64 `json:"latitude" binding:"omitempty,gte=-90,lte=90"`
-	Longitude *float64 `json:"longitude" binding:"omitempty,gte=-180,lte=180"`
-	Status *models.LoungeTransportLocationStatus `json:"status" binding:"omitempty,oneof=active inactive"`
+type UpdateLoungeTransportLocationRequest struct {
+	Location  *string                               `json:"location" binding:"omitempty,min=2,max=200"`
+	Latitude  *float64                              `json:"latitude" binding:"omitempty,gte=-90,lte=90"`
+	Longitude *float64                              `json:"longitude" binding:"omitempty,gte=-180,lte=180"`
+	Status    *models.LoungeTransportLocationStatus `json:"status" binding:"omitempty,oneof=active inactive"`
 }
-
 
 // Add transport locations to lounge
-func (h *LoungeTransportLocationHandler) AddLoungeTransportLocation(c *gin.Context){
+func (h *LoungeTransportLocationHandler) AddLoungeTransportLocation(c *gin.Context) {
 
 	// creating a struct variable to store request
 	var req AddLoungeTransportLocationRequest
 
 	// getting the data fed by the user
-	if err := c.ShouldBindJSON(&req); err!=nil {
+	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Error:   "Validation failed",
 			Message: err.Error(),
@@ -75,9 +73,6 @@ func (h *LoungeTransportLocationHandler) AddLoungeTransportLocation(c *gin.Conte
 		return
 	}
 
-	// getting the loungeID
-	loungeID := uuid.MustParse(c.Param("id"))
-
 	// Get lounge owner record
 	owner, err := h.loungeOwnerRepo.GetLoungeOwnerByUserID(userCtx.UserID)
 	if err != nil || owner == nil {
@@ -88,8 +83,8 @@ func (h *LoungeTransportLocationHandler) AddLoungeTransportLocation(c *gin.Conte
 		return
 	}
 
-	// Verify lounge ownership
-	lounge, err := h.loungeRepo.GetLoungeByID(loungeID)
+	// Verify lounge ownership using LoungeID from request only
+	lounge, err := h.loungeRepo.GetLoungeByID(req.LoungeID)
 	if err != nil || lounge == nil {
 		c.JSON(http.StatusNotFound, ErrorResponse{
 			Error:   "not_found",
@@ -107,21 +102,20 @@ func (h *LoungeTransportLocationHandler) AddLoungeTransportLocation(c *gin.Conte
 	}
 
 	// converting the data into the feeding model
-	TransportLocation :=&models.LoungeTransportLocation{
+	TransportLocation := &models.LoungeTransportLocation{
 
-		LoungeID: loungeID,
-		Location: req.Location,
-		Latitude: req.Latitude,
+		LoungeID:  req.LoungeID,
+		Location:  req.Location,
+		Latitude:  req.Latitude,
 		Longitude: req.Longitude,
-
 	}
 
 	// // Add transport location to lounge
-	createdLocation,err:= h.loungeTransportLocationRepo.AddTransportLocationToLounge(*TransportLocation)
+	createdLocation, err := h.loungeTransportLocationRepo.AddTransportLocationToLounge(*TransportLocation)
 
 	// checking for errors
-	if err!= nil {
-		log.Printf("ERROR: Failed to add location \"%s\" for lounge  %s: %v",req.Location,loungeID.String(), err)
+	if err != nil {
+		log.Printf("ERROR: Failed to add location \"%s\" for lounge  %s: %v", req.Location, req.LoungeID.String(), err)
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Error:   "add_failed",
 			Message: "Failed to add location",
@@ -130,16 +124,14 @@ func (h *LoungeTransportLocationHandler) AddLoungeTransportLocation(c *gin.Conte
 
 	}
 
-
 	// if all good then sending statusCreated with the data struct for reference
 	c.JSON(http.StatusCreated, createdLocation)
 
 }
 
-
 // get transport locations by lounge id
-func (h *LoungeTransportLocationHandler) GetLoungeTransportLocationsByLoungeID(c *gin.Context){
-	
+func (h *LoungeTransportLocationHandler) GetLoungeTransportLocationsByLoungeID(c *gin.Context) {
+
 	// Get user context from JWT middleware
 	userCtx, exists := middleware.GetUserContext(c)
 	if !exists {
@@ -183,7 +175,7 @@ func (h *LoungeTransportLocationHandler) GetLoungeTransportLocationsByLoungeID(c
 
 	// getting the transport locations by loungeID
 	locations, err := h.loungeTransportLocationRepo.GetLoungeTransportLocationsByLoungeID(loungeID)
-	if err !=nil {
+	if err != nil {
 		log.Printf("ERROR: Failed to get transport locations for lounge %s: %v", loungeID, err)
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Error:   "database_error",
@@ -193,35 +185,33 @@ func (h *LoungeTransportLocationHandler) GetLoungeTransportLocationsByLoungeID(c
 	}
 
 	// converting locations list inorder to send back formatting structure
-	response := make([]gin.H,0,len(locations))
+	response := make([]gin.H, 0, len(locations))
 
 	// looping and feeding the data
-	for _,s := range locations{
+	for _, s := range locations {
 		response = append(response, gin.H{
 
-			"id":                s.ID,
-			"lounge_id":   s.LoungeID,
-			"location":    s.Location,
-			"latitude":    s.Latitude,
+			"id":         s.ID,
+			"lounge_id":  s.LoungeID,
+			"location":   s.Location,
+			"latitude":   s.Latitude,
 			"longitude":  s.Longitude,
-			"status":        s.Status,
+			"status":     s.Status,
 			"created_at": s.CreatedAt,
 			"updated_at": s.UpdatedAt,
-
 		})
 	}
 
 	// sending back the dataset with the length
 	c.JSON(http.StatusOK, gin.H{
 		"transport_locations": response,
-		"total":   len(response),
+		"total":               len(response),
 	})
-
 
 }
 
 // delete lounge transport locations by location id
-func (h *LoungeTransportLocationHandler) DeleteLoungeTransportLocationByID(c *gin.Context){
+func (h *LoungeTransportLocationHandler) DeleteLoungeTransportLocationByID(c *gin.Context) {
 
 	// Get user context from JWT middleware
 	userCtx, exists := middleware.GetUserContext(c)
@@ -266,10 +256,10 @@ func (h *LoungeTransportLocationHandler) DeleteLoungeTransportLocationByID(c *gi
 		return
 	}
 
-	// verifying transport location belong to the lounge 
+	// verifying transport location belong to the lounge
 	locationData, err := h.loungeTransportLocationRepo.GetLoungeTransportLocationByID(locationID)
-	if err !=nil {
-		log.Printf("ERROR: Failed to get location %s: %v",locationID, err)
+	if err != nil {
+		log.Printf("ERROR: Failed to get location %s: %v", locationID, err)
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Error:   "database_error",
 			Message: "Failed to get location",
@@ -277,7 +267,7 @@ func (h *LoungeTransportLocationHandler) DeleteLoungeTransportLocationByID(c *gi
 		return
 	}
 	if locationData == nil {
-		log.Printf("ERROR: No location found %s:",locationID)
+		log.Printf("ERROR: No location found %s:", locationID)
 		c.JSON(http.StatusNotFound, ErrorResponse{
 			Error:   "not_found",
 			Message: "location not found",
@@ -285,9 +275,9 @@ func (h *LoungeTransportLocationHandler) DeleteLoungeTransportLocationByID(c *gi
 		return
 	}
 
-	// verify if the transport location actually belongs to the lounge 
+	// verify if the transport location actually belongs to the lounge
 	if locationData.LoungeID != loungeID {
-		log.Printf("ERROR:Location does not belong to this lounge %s:",loungeID)
+		log.Printf("ERROR:Location does not belong to this lounge %s:", loungeID)
 		c.JSON(http.StatusForbidden, ErrorResponse{
 			Error:   "forbidden",
 			Message: "Location does not belong to this lounge",
@@ -308,11 +298,11 @@ func (h *LoungeTransportLocationHandler) DeleteLoungeTransportLocationByID(c *gi
 
 	// success message
 	c.Status(http.StatusNoContent)
-	
+
 }
 
 // update lounge transport location by location id
-func (h *LoungeTransportLocationHandler) UpdateLoungeTransportLocationByID(c *gin.Context){
+func (h *LoungeTransportLocationHandler) UpdateLoungeTransportLocationByID(c *gin.Context) {
 
 	// validating the user who is sending the request
 	userCtx, exists := middleware.GetUserContext(c)
@@ -372,10 +362,10 @@ func (h *LoungeTransportLocationHandler) UpdateLoungeTransportLocationByID(c *gi
 		return
 	}
 
-	// verifying transport location belong to the lounge 
+	// verifying transport location belong to the lounge
 	locationData, err := h.loungeTransportLocationRepo.GetLoungeTransportLocationByID(locationID)
-	if err !=nil {
-		log.Printf("ERROR: Failed to get location %s: %v",locationID, err)
+	if err != nil {
+		log.Printf("ERROR: Failed to get location %s: %v", locationID, err)
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Error:   "database_error",
 			Message: "Failed to get location",
@@ -383,7 +373,7 @@ func (h *LoungeTransportLocationHandler) UpdateLoungeTransportLocationByID(c *gi
 		return
 	}
 	if locationData == nil {
-		log.Printf("ERROR: No location found %s:",locationID)
+		log.Printf("ERROR: No location found %s:", locationID)
 		c.JSON(http.StatusNotFound, ErrorResponse{
 			Error:   "not_found",
 			Message: "location not found",
@@ -391,9 +381,9 @@ func (h *LoungeTransportLocationHandler) UpdateLoungeTransportLocationByID(c *gi
 		return
 	}
 
-	// verify if the transport location actually belongs to the lounge 
+	// verify if the transport location actually belongs to the lounge
 	if locationData.LoungeID != loungeID {
-		log.Printf("ERROR:Location does not belong to this lounge %s:",loungeID)
+		log.Printf("ERROR:Location does not belong to this lounge %s:", loungeID)
 		c.JSON(http.StatusForbidden, ErrorResponse{
 			Error:   "forbidden",
 			Message: "Location does not belong to this lounge",
@@ -401,21 +391,20 @@ func (h *LoungeTransportLocationHandler) UpdateLoungeTransportLocationByID(c *gi
 		return
 	}
 
-
 	// creating a update request struct for location
 	var req UpdateLoungeTransportLocationRequest
 
 	// passing the data into the request struct
-	if err := c.ShouldBindJSON(&req); err!= nil{
-		c.JSON(http.StatusBadRequest,ErrorResponse{
-			Error: "validation_failed",
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Error:   "validation_failed",
 			Message: err.Error(),
 		})
 		return
 	}
 
 	// creating a map to convert data into the required format
-	updates :=make(map[string]interface{})
+	updates := make(map[string]interface{})
 
 	if req.Location != nil {
 		updates["location"] = req.Location
@@ -431,18 +420,17 @@ func (h *LoungeTransportLocationHandler) UpdateLoungeTransportLocationByID(c *gi
 	}
 
 	// update the location
-	if err := h.loungeTransportLocationRepo.UpdateLoungeTransportLocationByID(locationID,updates);err != nil {
-			// if error occured returning the server error
+	if err := h.loungeTransportLocationRepo.UpdateLoungeTransportLocationByID(locationID, updates); err != nil {
+		// if error occured returning the server error
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
-            Error:   "update_failed",
-            Message: "Failed to update location",
-        })
-        return
+			Error:   "update_failed",
+			Message: "Failed to update location",
+		})
+		return
 	}
 
 	// if ok returning the update location
-	updatedLocation,_ := h.loungeTransportLocationRepo.GetLoungeTransportLocationByID(locationID)
+	updatedLocation, _ := h.loungeTransportLocationRepo.GetLoungeTransportLocationByID(locationID)
 	c.JSON(http.StatusOK, updatedLocation)
 
 }
-

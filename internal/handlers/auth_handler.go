@@ -30,6 +30,7 @@ type AuthHandler struct {
 	userSessionRepository  *database.UserSessionRepository
 	smsGateway             sms.SMSGateway
 	config                 *config.Config
+	loungeRepository       *database.LoungeRepository
 }
 
 // NewAuthHandler creates a new auth handler
@@ -45,6 +46,7 @@ func NewAuthHandler(
 	userSessionRepository *database.UserSessionRepository,
 	smsGateway sms.SMSGateway,
 	cfg *config.Config,
+	loungeRepository *database.LoungeRepository,
 ) *AuthHandler {
 	return &AuthHandler{
 		jwtService:             jwtService,
@@ -58,6 +60,7 @@ func NewAuthHandler(
 		userSessionRepository:  userSessionRepository,
 		smsGateway:             smsGateway,
 		config:                 cfg,
+		loungeRepository:       loungeRepository,
 	}
 }
 
@@ -998,6 +1001,33 @@ func (h *AuthHandler) VerifyOTPLoungeStaff(c *gin.Context, loungeStaffRepo *data
 	loungeUUID, err := uuid.Parse(req.LoungeID)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{Error: "invalid_lounge_id", Message: "Invalid lounge UUID"})
+		return
+	}
+	// verify lounge exists and approved 
+	lounge, err := h.loungeRepository.GetLoungeByID(loungeUUID)
+	
+	if err != nil {
+		log.Printf("ERROR: Failed to verify lounge %s: %v", loungeUUID, err)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Error:   "database_error",
+			Message: "Failed to verify lounge",
+		})
+		return
+	}
+
+	if lounge == nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Error:   "invalid_lounge",
+			Message: "Selected lounge does not exist",
+		})
+		return
+	}
+
+	if lounge.Status != models.LoungeStatusApproved {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Error:   "lounge_not_approved",
+			Message: "Selected lounge is not available for staff registration",
+		})
 		return
 	}
 

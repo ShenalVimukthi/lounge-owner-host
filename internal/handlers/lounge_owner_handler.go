@@ -5,7 +5,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
-
+	"github.com/google/uuid"
 	"github.com/gin-gonic/gin"
 	"github.com/smarttransit/sms-auth-backend/internal/database"
 	"github.com/smarttransit/sms-auth-backend/internal/middleware"
@@ -16,16 +16,19 @@ import (
 type LoungeOwnerHandler struct {
 	loungeOwnerRepo *database.LoungeOwnerRepository
 	userRepo        *database.UserRepository
+	loungeRepo      *database.LoungeRepository
 }
 
 // NewLoungeOwnerHandler creates a new lounge owner handler
 func NewLoungeOwnerHandler(
 	loungeOwnerRepo *database.LoungeOwnerRepository,
 	userRepo *database.UserRepository,
+	loungeRepo *database.LoungeRepository,
 ) *LoungeOwnerHandler {
 	return &LoungeOwnerHandler{
 		loungeOwnerRepo: loungeOwnerRepo,
 		userRepo:        userRepo,
+		loungeRepo:      loungeRepo,
 	}
 }
 
@@ -301,4 +304,161 @@ func (h *LoungeOwnerHandler) GetProfile(c *gin.Context) {
 		"created_at":          owner.CreatedAt,
 		"updated_at":          owner.UpdatedAt,
 	})
+}
+
+// PUBLIC HANDLERS WHICH IS USED TO SEND LOUNGE OWNER AND LOUNGE DATA TO FRONTEND
+
+// get approved lounge owners
+func (h *LoungeOwnerHandler) GetApprovedLoungeOwners(c *gin.Context) {
+
+	// Get approved lounge owners
+	owners, err := h.loungeOwnerRepo.GetApprovedLoungeOwners()
+	if err != nil {
+		log.Printf("ERROR: Failed to get approved lounge owners: %v", err)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Error:   "database_error",
+			Message: "Failed to retrieve lounge owners",
+		})
+		return
+	}
+
+	// Helper function to extract values from sql.NullString types
+	getNullableString := func(ns sql.NullString) *string {
+    if ns.Valid {
+        return &ns.String
+    }
+    return nil
+	}
+
+	// Convert to response format (only public info)
+	response := make([]gin.H, 0, len(owners))
+	for _, owner := range owners {
+		// Get lounge count for this owner
+		loungeCount, _ := h.loungeOwnerRepo.GetLoungeCount(owner.ID)
+
+		response = append(response, gin.H{
+			"id":            owner.ID,
+			"business_name": getNullableString(owner.BusinessName),
+			"manager_name":  getNullableString(owner.ManagerFullName),
+			"total_lounges": loungeCount,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"lounge_owners": response,
+	})
+}
+
+// get lounges by ownerID
+func (h *LoungeOwnerHandler) GetLoungesByOwnerID(c *gin.Context) {
+
+	// Get owner ID from URL
+	ownerIDStr := c.Param("owner_id")
+	ownerID, err := uuid.Parse(ownerIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Error:   "invalid_owner_id",
+			Message: "Invalid lounge owner ID format",
+		})
+		return
+	}
+
+	// Verify owner exists and is approved
+	owner, err := h.loungeOwnerRepo.GetLoungeOwnerByID(ownerID)
+	if err != nil {
+		log.Printf("ERROR: Failed to get lounge owner %s: %v", ownerID, err)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Error:   "database_error",
+			Message: "Failed to retrieve lounge owner",
+		})
+		return
+	}
+
+	if owner == nil {
+		c.JSON(http.StatusNotFound, ErrorResponse{
+			Error:   "not_found",
+			Message: "Lounge owner not found",
+		})
+		return
+	}
+
+	if owner.VerificationStatus != models.LoungeVerificationApproved {
+		c.JSON(http.StatusNotFound, ErrorResponse{
+			Error:   "not_found",
+			Message: "Lounge owner not found",
+		})
+		return
+	}
+
+	// Get lounges for this owner
+	lounges, err := h.loungeRepo.GetLoungesByOwnerID(ownerID)
+	if err != nil {
+		log.Printf("ERROR: Failed to get lounges for owner %s: %v", ownerID, err)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Error:   "database_error",
+			Message: "Failed to retrieve lounges",
+		})
+		return
+	}
+
+	// Convert to response format
+	response := make([]gin.H, 0, len(lounges))
+	for _, lounge := range lounges {
+		response = append(response, gin.H{
+			"id":          lounge.ID,
+			"lounge_name": lounge.LoungeName,
+			"address":     lounge.Address,
+			"status":      lounge.Status,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"lounges": response,
+	})
+
+}
+
+func (h *LoungeOwnerHandler) GetApprovedLoungeOwnersByProvince(c *gin.Context){
+
+	// get approved lounge owners grouped by province
+	provinceGroups, err := h.loungeOwnerRepo.GetApprovedLoungeOwnersByProvince()
+	if err != nil {
+		log.Printf("ERROR: Failed to get approved lounge owners by province: %v", err)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Error:   "database_error",
+			Message: "Failed to retrieve lounge owners",
+		})
+		return
+	}
+
+	// Helper function to extract values from sql.NullString types
+	getNullableString := func(ns sql.NullString) *string {
+		if ns.Valid {
+			return &ns.String
+		}
+		return nil
+	}
+
+	// Convert to response format grouped by province
+	response := make(map[string][]gin.H)
+	for province, owners := range provinceGroups {
+		response[province] = make([]gin.H, 0, len(owners))
+		for _, owner := range owners {
+			// Get lounge count for this owner
+			loungeCount, _ := h.loungeOwnerRepo.GetLoungeCount(owner.ID)
+
+			response[province] = append(response[province], gin.H{
+				"id":             owner.ID,
+				"business_name":  getNullableString(owner.BusinessName),
+				"manager_name":   getNullableString(owner.ManagerFullName),
+				"total_lounges":  loungeCount,
+				"province":       province,
+			})
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"lounge_owners_by_province": response,
+	})
+
 }
