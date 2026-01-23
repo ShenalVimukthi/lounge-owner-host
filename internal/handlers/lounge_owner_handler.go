@@ -418,10 +418,10 @@ func (h *LoungeOwnerHandler) GetLoungesByOwnerID(c *gin.Context) {
 
 }
 
-func (h *LoungeOwnerHandler) GetApprovedLoungeOwnersByProvince(c *gin.Context){
+func (h *LoungeOwnerHandler) GetApprovedLoungeOwnersByDsitrict(c *gin.Context){
 
 	// get approved lounge owners grouped by province
-	provinceGroups, err := h.loungeOwnerRepo.GetApprovedLoungeOwnersByProvince()
+	provinceGroups, err := h.loungeOwnerRepo.GetApprovedLoungeOwnersByDistrict()
 	if err != nil {
 		log.Printf("ERROR: Failed to get approved lounge owners by province: %v", err)
 		c.JSON(http.StatusInternalServerError, ErrorResponse{

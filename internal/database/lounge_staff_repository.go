@@ -276,3 +276,15 @@ func (r *LoungeStaffRepository) GetStaffWithUserDetails(staffID uuid.UUID) (map[
 
 	return result, nil
 }
+
+// Update staffApprovement status 
+func (r *LoungeStaffRepository) UpdateStaffApprovementStatus(
+	staffID uuid.UUID,
+	approval string,
+	employment string,
+	) error {
+
+		// To be implemented 
+
+	return nil
+}

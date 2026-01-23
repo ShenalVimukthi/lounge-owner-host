@@ -416,14 +416,14 @@ func (r *LoungeOwnerRepository) GetApprovedLoungeOwners()([]models.LoungeOwner,e
 }
 
 // get lounge owners by the province filter by province
-func (r *LoungeOwnerRepository) GetApprovedLoungeOwnersByProvince()(map[string][]models.LoungeOwner,error){
+func (r *LoungeOwnerRepository) GetApprovedLoungeOwnersByDistrict()(map[string][]models.LoungeOwner,error){
 
 	var owners []models.LoungeOwner
 
 	query :=`
 			SELECT * FROM lounge_owners
 			WHERE verification_status = 'approved'
-			ORDER BY province ASC, business_name ASC
+			ORDER BY district ASC, business_name ASC
 			`
 	err := r.db.Select(&owners, query)
 	if err != nil {
