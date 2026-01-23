@@ -43,12 +43,16 @@ const (
 	LoungeStaffEmploymentActive     LoungeStaffEmploymentStatus = "active"
 	LoungeStaffEmploymentTerminated LoungeStaffEmploymentStatus = "terminated"
 	LoungeStaffEmploymentSuspended  LoungeStaffEmploymentStatus = "suspended"
+	// I am adding another status as pending for the initial filling of data 
+	LoungeStaffEmployementPending   LoungeStaffEmploymentStatus = "pending"
+	
 )
 
 // NEW ADDITION => ENUM (Because now owner does not adding staff they are not invited by owner)
 type LoungeStaffApproveStatus string 
 
 const (
+
 	LoungeStaffApproveStatusApproved LoungeStaffApproveStatus = "approved"
 	LoungeStaffApproveStatusDeclined LoungeStaffApproveStatus = "declined"
 	LoungeStaffApproveStatusPending  LoungeStaffApproveStatus  = "pending"

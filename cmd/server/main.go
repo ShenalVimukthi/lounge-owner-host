@@ -666,7 +666,7 @@ func main() {
 				// Staff management for specific lounge (requires approval)
 				//there is a route missmatch in staff related functions will fix it soon
 				logger.Info("  ✅ GET /api/v1/lounges/:id/staff (read-only, no approval needed)")
-				loungesProtected.GET("/:id/staff", loungeStaffHandler.GetStaffByLounge)
+				loungesProtected.GET("/:id/staff", loungeStaffHandler.GetStaffByLounge)//This endpont will most probabbly removed (i kept it for now to backward compatability)
 				logger.Info("  ✅ POST /api/v1/lounges/:id/staff (requires approval)")
 				loungesProtected.POST("/:id/staff", middleware.RequireApprovedLoungeOwner(loungeOwnerRepository), loungeStaffHandler.AddStaff)
 				// Permission management moved to users.roles array - removed permission_type field
@@ -700,6 +700,12 @@ func main() {
 				loungesProtected.GET("/:id/transport-locations/:location_id/prices",loungeTransportLocationPriceHandler.GetLoungeTransportLocationPrices)
 				logger.Info(" ✅ POST /api/v1/lounges/:id/transport-locations/:location_id/prices - set transport location prices in lounge (requires approval)")
 				loungesProtected.POST("/:id/transport-locations/:location_id/prices",middleware.RequireApprovedLoungeOwner(loungeOwnerRepository),loungeTransportLocationPriceHandler.SetLoungeTransportLocationPrices)
+
+				// lounge staff approval management 
+				logger.Info(" ✅ PUT /api/v1/lounges/:id/staff/:staff_id/approval - set approval status for staff (requires approval)")
+				loungesProtected.PUT("/:id/staff/:staff_id/approval",middleware.RequireApprovedLoungeOwner(loungeOwnerRepository),loungeStaffHandler.ApproveStaff)
+				logger.Info("✅ GET /api/v1/lounges/:id/staff - get staff with filtering (read-only, no approval needed)")
+				loungesProtected.GET("/:id/staff",loungeStaffHandler.GetStaffByLoungeWithApprovalFilter)
 
 			}
 		}

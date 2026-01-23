@@ -24,7 +24,7 @@ func NewLoungeStaffRepository(db *sqlx.DB) *LoungeStaffRepository {
 func (r *LoungeStaffRepository) CreateLoungeStaff(userID uuid.UUID)(*models.LoungeStaff,error){
 	return nil, nil
 }
-
+//(ADD staff approvement_status to the table -> currently not implemented)
 // NEW METHOD TO ADD COMPLETE STAFF DETAILS (THE OLD WAS LEFT TO BACKEND COMPATABILITY)
 func (r *LoungeStaffRepository) AddStaffToLoungeWithCompleteData(
 	loungeID uuid.UUID,
@@ -217,6 +217,10 @@ func (r *LoungeStaffRepository) UpdateStaffEmploymentStatus(
 		UPDATE lounge_staff 
 		SET 
 			employment_status = $1,
+			terminated_date = CASE
+				WHEN $1 = 'terminated' THEN NOW()
+				ELSE terminated_date
+			END,
 			updated_at = NOW()
 		WHERE id = $2
 	`
@@ -280,11 +284,91 @@ func (r *LoungeStaffRepository) GetStaffWithUserDetails(staffID uuid.UUID) (map[
 // Update staffApprovement status 
 func (r *LoungeStaffRepository) UpdateStaffApprovementStatus(
 	staffID uuid.UUID,
-	approval string,
-	employment string,
+	approvementStatus string,
+	employmentStatus *string,
 	) error {
 
-		// To be implemented 
+	query := `
+		UPDATE lounge_staff
+		SET
+			approvement_status = $1,
+			employment_status = COALESCE($2, employment_status),
+			hired_date = CASE
+				WHEN $1 = 'approved' THEN NOW()
+				ELSE hired_date
+			END,	
+			updated_at = NOW()
+		WHERE id = $3
+	`
+
+	result, err := r.db.Exec(
+		query,
+		approvementStatus,
+		employmentStatus,
+		staffID,
+	)
+
+	if err != nil {
+		return fmt.Errorf("failed to update staff approval status: %w", err)
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rows == 0 {
+		return fmt.Errorf("staff member not found")
+	}
 
 	return nil
 }
+
+// function to get loungeStaff according the approvementStatus
+func (r *LoungeStaffRepository) GetStaffByLoungeWithFilter(
+	loungeID uuid.UUID,
+	approvementStatusFilter *string, // nil for all, or "pending", "approved", "declined"	
+)([]models.LoungeStaff,error) {
+
+	var staff []models.LoungeStaff
+
+	query := `
+		SELECT * FROM lounge_staff
+		WHERE lounge_id = $1
+	`
+	args := []interface{}{loungeID}
+
+	if approvementStatusFilter != nil {
+		query += ` AND approvement_status = $2`
+		args = append(args, *approvementStatusFilter)
+	}
+
+	query += ` ORDER BY created_at DESC`
+
+	err := r.db.Select(&staff, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get staff by lounge: %w", err)
+	}
+
+	return staff, nil
+}
+
+// GetStaffByIDWithDetails retrieves a staff member and verifies ownership
+func (r *LoungeStaffRepository) GetStaffByIDWithDetails(staffID uuid.UUID) (*models.LoungeStaff,error){
+	var staff models.LoungeStaff
+
+	query := `
+		SELECT * FROM lounge_staff
+		WHERE id = $1
+	`
+
+	err := r.db.Get(&staff, query, staffID)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get staff: %w", err)
+	}
+
+	return &staff, nil
+ }

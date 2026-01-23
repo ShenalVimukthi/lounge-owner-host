@@ -3,7 +3,7 @@ package handlers
 import (
 	"log"
 	"net/http"
-
+	"database/sql"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/smarttransit/sms-auth-backend/internal/database"
@@ -38,6 +38,10 @@ func NewLoungeStaffHandler(
 type AddStaffRequest struct {
 	LoungeID string `json:"lounge_id" binding:"required"`
 	Phone    string `json:"phone" binding:"required"` // Staff's phone number
+}
+
+type ApproveStaffRequest struct {
+	ApprovementStatus string `json:"approvement_status" binding:"required,oneof=approved declined"`
 }
 
 // AddStaff handles POST /api/v1/lounges/:id/:lounge_id/staff == edited added lounge_id here
@@ -387,4 +391,271 @@ func (h *LoungeStaffHandler) GetMyStaffProfile(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, response)
+}
+
+// ApproveStaff handles PUT /api/v1/lounges/:lounge_id/staff/:staff_id/approval
+// handler to handle the staff approvement status 
+func (h *LoungeStaffHandler) ApproveStaff(c *gin.Context) {
+	
+	// Get user context from JWT middleware
+	userCtx, exists := middleware.GetUserContext(c)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{
+			Error:   "unauthorized",
+			Message: "User context not found",
+		})
+		return
+	}
+
+	// Extract route parameters
+	loungeIDStr := c.Param("lounge_id")
+	staffIDStr := c.Param("staff_id")
+
+	loungeID, err := uuid.Parse(loungeIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Error:   "invalid_lounge_id",
+			Message: "Invalid lounge ID format",
+		})
+		return
+	}
+
+	staffID, err := uuid.Parse(staffIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Error:   "invalid_staff_id",
+			Message: "Invalid staff ID format",
+		})
+		return
+	}
+
+	// Parse request body
+	var req ApproveStaffRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Error:   "validation_error",
+			Message: "Invalid request body: " + err.Error(),
+		})
+		return
+	}
+
+
+	// Get the lounge to verify ownership
+	lounge, err := h.loungeRepo.GetLoungeByID(loungeID)
+	if err != nil {
+		log.Printf("ERROR: Failed to get lounge %s: %v", loungeID, err)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Error:   "database_error",
+			Message: "Failed to retrieve lounge",
+		})
+		return
+	}
+
+	if lounge == nil {
+		c.JSON(http.StatusNotFound, ErrorResponse{
+			Error:   "not_found",
+			Message: "Lounge not found",
+		})
+		return
+	}
+
+	// Verify the user is the lounge owner
+	if lounge.LoungeOwnerID != userCtx.UserID {
+		c.JSON(http.StatusForbidden, ErrorResponse{
+			Error:   "forbidden",
+			Message: "You do not have permission to approve staff for this lounge",
+		})
+		return
+	}
+
+	// Get the staff member to verify they belong to this lounge
+	staff, err := h.staffRepo.GetStaffByIDWithDetails(staffID)
+	if err != nil {
+		log.Printf("ERROR: Failed to get staff %s: %v", staffID, err)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Error:   "database_error",
+			Message: "Failed to retrieve staff member",
+		})
+		return
+	}
+
+	if staff == nil {
+		c.JSON(http.StatusNotFound, ErrorResponse{
+			Error:   "not_found",
+			Message: "Staff member not found",
+		})
+		return
+	}
+
+	// Verify the staff belongs to this lounge
+	if staff.LoungeID != loungeID {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Error:   "invalid_request",
+			Message: "Staff member does not belong to this lounge",
+		})
+		return
+	}
+
+	// Determine employment status based on approval decision
+	var employmentStatus *string
+	switch req.ApprovementStatus {
+	case "approved":
+		activeStatus := "active"
+		employmentStatus = &activeStatus
+	case "declined":
+		inactiveStatus := "inactive"
+		employmentStatus = &inactiveStatus
+	}
+
+	// Update staff approval status
+	err = h.staffRepo.UpdateStaffApprovementStatus(
+		staffID,
+		req.ApprovementStatus,
+		employmentStatus,
+	)
+	if err != nil {
+		log.Printf("ERROR: Failed to update staff approval status for %s: %v", staffID, err)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Error:   "update_failed",
+			Message: "Failed to update staff approval status",
+		})
+		return
+	}
+
+	// Retrieve updated staff record
+	updatedStaff, err := h.staffRepo.GetStaffByIDWithDetails(staffID)
+	if err != nil {
+		log.Printf("ERROR: Failed to retrieve updated staff %s: %v", staffID, err)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Error:   "database_error",
+			Message: "Failed to retrieve updated staff information",
+		})
+		return
+	}
+
+	log.Printf("INFO: Staff %s approval status updated to %s by owner %s",
+		staffID, req.ApprovementStatus, userCtx.UserID)
+	
+	c.JSON(http.StatusOK, gin.H{
+		"message":              "Staff approval status updated successfully",
+		"staff_id":             updatedStaff.ID,
+		"approvement_status":   updatedStaff.ApprovementStatus,
+		"employment_status":    updatedStaff.EmploymentStatus,
+		"updated_at":           updatedStaff.UpdatedAt,
+	})
+}
+
+// GetStaffByLoungeWithApprovalFilter handles GET /api/v1/lounges/:id/staff with optional status filter
+// This can be used to get staffData based on filter conditions like Query params: ?approval_status=pending|approved|declined 
+func (h *LoungeStaffHandler) GetStaffByLoungeWithApprovalFilter(c *gin.Context){
+	
+	// Get user context from JWT middleware
+	userCtx, exists := middleware.GetUserContext(c)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{
+			Error:   "unauthorized",
+			Message: "User context not found",
+		})
+		return
+	}
+
+	// Extract route parameter
+	loungeIDStr := c.Param("id")
+	loungeID, err := uuid.Parse(loungeIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Error:   "invalid_lounge_id",
+			Message: "Invalid lounge ID format",
+		})
+		return
+	}
+
+	// Get the lounge to verify ownership
+	lounge, err := h.loungeRepo.GetLoungeByID(loungeID)
+	if err != nil {
+		log.Printf("ERROR: Failed to get lounge %s: %v", loungeID, err)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Error:   "database_error",
+			Message: "Failed to retrieve lounge",
+		})
+		return
+	}
+
+	if lounge == nil {
+		c.JSON(http.StatusNotFound, ErrorResponse{
+			Error:   "not_found",
+			Message: "Lounge not found",
+		})
+		return
+	}
+
+	// Verify the user is the lounge owner
+	if lounge.LoungeOwnerID != userCtx.UserID {
+		c.JSON(http.StatusForbidden, ErrorResponse{
+			Error:   "forbidden",
+			Message: "You do not have permission to view staff for this lounge",
+		})
+		return
+	}
+
+	// Get optional approval status filter from query params
+	approvementStatusParam := c.Query("approval_status")
+	var approvementStatusFilter *string
+	if approvementStatusParam != "" {
+		validStatuses := map[string]bool{
+			"pending":   true,
+			"approved":  true,
+			"declined":  true,
+		}
+		if !validStatuses[approvementStatusParam] {
+			c.JSON(http.StatusBadRequest, ErrorResponse{
+				Error:   "invalid_filter",
+				Message: "Invalid approval status filter. Use: pending, approved, or declined",
+			})
+			return
+		}
+		approvementStatusFilter = &approvementStatusParam
+	}
+
+	// Get staff with optional filter
+	staff, err := h.staffRepo.GetStaffByLoungeWithFilter(loungeID, approvementStatusFilter)
+	if err != nil {
+		log.Printf("ERROR: Failed to get staff for lounge %s: %v", loungeID, err)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Error:   "database_error",
+			Message: "Failed to retrieve staff",
+		})
+		return
+	}
+
+	// Helper function to extract nullable strings
+	getNullableString := func(ns sql.NullString) *string {
+		if ns.Valid {
+			return &ns.String
+		}
+		return nil
+	}
+
+	// Convert to response format(i changed the format to match the repo)
+	response := make([]gin.H, 0, len(staff))
+	for _, s := range staff {
+		response = append(response, gin.H{
+			"id":                   s.ID,
+			"lounge_id":            s.LoungeID,
+			"first_name":           getNullableString(s.FullName),
+			"nic_number":           getNullableString(s.NICNumber),
+			"email":                getNullableString(s.Email),
+			"approvement_status":   s.ApprovementStatus,
+			"employment_status":    s.EmploymentStatus,
+			"created_at":           s.CreatedAt,
+			"updated_at":           s.UpdatedAt,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"staff":  response,
+		"total":  len(response),
+		"filter": approvementStatusFilter,
+	})
+
 }

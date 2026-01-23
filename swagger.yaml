@@ -525,6 +525,171 @@ paths:
         "500":
           $ref: "#/components/responses/InternalServerError"
 
+  /api/v1/auth/verify-otp-lounge-staff:
+    post:
+      summary: Verify OTP and register/login (Lounge Staff)
+      description: |
+        Verifies the OTP for lounge staff users and returns JWT tokens.
+
+        **Lounge Staff Specific:** Creates user with 'lounge_staff' role and creates lounge_staff record.
+
+        **Staff Registration Flow:**
+        1. Staff sends OTP via `/auth/send-otp`
+        2. Staff selects lounge owner and lounge from public endpoints
+        3. Staff submits OTP + lounge_id + personal details
+        4. System creates user with 'lounge_staff' role
+        5. System creates lounge_staff record with `approvement_status = 'pending'`
+        6. Staff waits for lounge owner approval via `/lounges/:id/staff/:staff_id/approval`
+
+        **Multi-role Support:** Existing users (passengers) can become lounge staff.
+      operationId: verifyOtpLoungeStaff
+      tags:
+        - Authentication
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - phone_number
+                - otp
+                - lounge_id
+                - full_name
+                - nic_number
+                - email
+              properties:
+                phone_number:
+                  type: string
+                  pattern: '^\+94[0-9]{9}$'
+                  example: "+94771234567"
+                  description: Phone number in E.164 format
+                otp:
+                  type: string
+                  minLength: 6
+                  maxLength: 6
+                  example: "123456"
+                  description: 6-digit OTP code
+                lounge_id:
+                  type: string
+                  format: uuid
+                  example: "550e8400-e29b-41d4-a716-446655440000"
+                  description: UUID of the lounge staff wants to work for (must be approved lounge)
+                full_name:
+                  type: string
+                  example: "John Doe"
+                  description: Staff member's full name
+                nic_number:
+                  type: string
+                  example: "199512345678"
+                  description: National Identity Card number
+                email:
+                  type: string
+                  format: email
+                  example: "john@example.com"
+                  description: Staff member's email address
+      responses:
+        "200":
+          description: OTP verified successfully, staff registered
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "OTP verified successfully"
+                  access_token:
+                    type: string
+                    example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                  refresh_token:
+                    type: string
+                    example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                  expires_in_seconds:
+                    type: integer
+                    example: 3600
+                    description: Access token expiry in seconds
+                  is_new_user:
+                    type: boolean
+                    example: true
+                    description: Whether this is a newly created user
+                  profile_complete:
+                    type: boolean
+                    example: true
+                    description: Staff profile is complete (always true for staff registration)
+                  roles:
+                    type: array
+                    items:
+                      type: string
+                    example: ["lounge_staff"]
+                    description: User's roles including lounge_staff
+        "400":
+          description: Bad request - validation errors
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "invalid_lounge_id"
+                  message:
+                    type: string
+                    example: "Invalid lounge UUID"
+              examples:
+                invalidLounge:
+                  summary: Invalid lounge ID
+                  value:
+                    error: "invalid_lounge"
+                    message: "Selected lounge does not exist"
+                loungeNotApproved:
+                  summary: Lounge not approved
+                  value:
+                    error: "lounge_not_approved"
+                    message: "Selected lounge is not available for staff registration"
+                invalidOtp:
+                  summary: Invalid OTP
+                  value:
+                    error: "otp_invalid"
+                    message: "Invalid OTP code"
+        "401":
+          $ref: "#/components/responses/InvalidOtp"
+        "404":
+          description: No OTP found for phone number
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "no_otp_found"
+                  message:
+                    type: string
+                    example: "No OTP found for this phone number. Please request an OTP first."
+                  code:
+                    type: string
+                    example: "NO_OTP"
+        "429":
+          description: Too many OTP validation attempts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "max_attempts_exceeded"
+                  message:
+                    type: string
+                    example: "Maximum OTP validation attempts exceeded. Please request a new OTP."
+                  code:
+                    type: string
+                    example: "MAX_ATTEMPTS"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
   /api/v1/auth/otp-status/{phone}:
     get:
       summary: Get OTP status for phone number
@@ -1533,19 +1698,19 @@ paths:
       summary: Get assigned trips for staff member
       description: |
         Retrieves all trips assigned to the authenticated staff member (driver or conductor).
-        
+
         **Returns trips where:**
         - User is assigned as driver (assigned_driver_id matches user's staff ID)
         - OR user is assigned as conductor (assigned_conductor_id matches user's staff ID)
-        
+
         **Each trip includes:**
         - `is_driver`: true if user is assigned as driver for this trip
         - `is_conductor`: true if user is assigned as conductor for this trip
-        
+
         **Filters:**
         - Only returns trips with status NOT in ('cancelled', 'completed')
         - Optional date range filtering via query parameters
-        
+
         **Use Case:** Driver/Conductor app home screen to show upcoming assigned trips
       operationId: getStaffAssignedTrips
       tags:
@@ -1626,7 +1791,7 @@ paths:
       description: |
         Retrieves the current active trip for the authenticated staff member.
         Returns null if no active trip exists.
-        
+
         **Use Case:** Check if driver/conductor has an ongoing trip when opening the app
       operationId: getMyActiveTrip
       tags:
@@ -1662,12 +1827,12 @@ paths:
       description: |
         Starts a scheduled trip and creates an active trip record.
         Requires GPS location for the starting point.
-        
+
         **Validations:**
         - Staff must be assigned to the trip (as driver or conductor)
         - Trip must be in 'scheduled' or 'confirmed' status
         - Trip departure date must be today
-        
+
         **Side Effects:**
         - Creates active_trips record with status 'in_transit'
         - Updates scheduled_trips status to 'in_progress'
@@ -1748,7 +1913,7 @@ paths:
       description: |
         Updates the GPS location for an active trip.
         Called periodically by the driver/conductor app.
-        
+
         **Updates:**
         - Current latitude/longitude
         - Speed (km/h)
@@ -1828,7 +1993,7 @@ paths:
       description: |
         Ends an active trip and marks it as completed.
         Requires final GPS location.
-        
+
         **Side Effects:**
         - Updates active_trips status to 'completed'
         - Updates scheduled_trips status to 'completed'
@@ -3767,6 +3932,196 @@ paths:
         "500":
           $ref: "#/components/responses/InternalServerError"
 
+  # ============================================================================
+  # PUBLIC LOUNGE OWNER DISCOVERY ENDPOINTS
+  # For lounge staff registration - allows staff to select lounge owner
+  # ============================================================================
+  /api/v1/lounge-owner/approved:
+    get:
+      summary: Get all approved lounge owners (Public)
+      description: |
+        Get list of all approved lounge owners for staff registration flow.
+
+        **Public endpoint** - no authentication required.
+
+        **Use case:** Lounge staff can browse and select which lounge owner they want to work for.
+      operationId: getApprovedLoungeOwners
+      tags:
+        - Lounge Owner
+      security: []
+      responses:
+        "200":
+          description: Approved lounge owners retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  lounge_owners:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                          format: uuid
+                        business_name:
+                          type: string
+                          example: "City Central Lounge Services"
+                        manager_name:
+                          type: string
+                          example: "John Doe"
+                        business_registration_number:
+                          type: string
+                          example: "PV123456"
+                        district:
+                          type: string
+                          example: "Colombo"
+                        total_lounges:
+                          type: integer
+                          example: 3
+                          description: Number of lounges owned
+                  total:
+                    type: integer
+                    example: 15
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/v1/lounge-owner/approved/grouped-by-district:
+    get:
+      summary: Get approved lounge owners grouped by district (Public)
+      description: |
+        Get approved lounge owners grouped by district for easier staff selection.
+
+        **Public endpoint** - no authentication required.
+
+        **Use case:** Helps lounge staff find owners in their local district.
+
+        **Response:** Map of district names to arrays of lounge owners.
+      operationId: getApprovedLoungeOwnersByDistrict
+      tags:
+        - Lounge Owner
+      security: []
+      responses:
+        "200":
+          description: Lounge owners grouped by district
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      business_name:
+                        type: string
+                      manager_name:
+                        type: string
+                      business_registration_number:
+                        type: string
+                      total_lounges:
+                        type: integer
+              example:
+                Colombo:
+                  - id: "550e8400-e29b-41d4-a716-446655440000"
+                    business_name: "City Central Lounge Services"
+                    manager_name: "John Doe"
+                    business_registration_number: "PV123456"
+                    total_lounges: 3
+                  - id: "660e8400-e29b-41d4-a716-446655440001"
+                    business_name: "Metro Lounge Group"
+                    manager_name: "Jane Smith"
+                    business_registration_number: "PV789012"
+                    total_lounges: 2
+                Galle:
+                  - id: "770e8400-e29b-41d4-a716-446655440002"
+                    business_name: "Beach Side Lounges"
+                    manager_name: "Bob Johnson"
+                    business_registration_number: "PV345678"
+                    total_lounges: 1
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/v1/lounge-owner/{owner_id}/lounges:
+    get:
+      summary: Get all lounges for a specific owner (Public)
+      description: |
+        Get all lounges owned by a specific lounge owner.
+
+        **Public endpoint** - no authentication required.
+
+        **Use case:** Staff can view all lounges under a specific owner before registering.
+      operationId: getLoungesByOwnerId
+      tags:
+        - Lounge Owner
+      security: []
+      parameters:
+        - name: owner_id
+          in: path
+          required: true
+          description: Lounge owner UUID
+          schema:
+            type: string
+            format: uuid
+            example: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        "200":
+          description: Lounges retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  lounges:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                          format: uuid
+                        lounge_name:
+                          type: string
+                          example: "City Central Lounge"
+                        address:
+                          type: string
+                          example: "123 Main Street"
+                        city:
+                          type: string
+                          example: "Colombo"
+                        state:
+                          type: string
+                          example: "Western"
+                        status:
+                          type: string
+                          enum: [pending, approved, rejected]
+                          example: "approved"
+                        capacity:
+                          type: integer
+                          example: 50
+                  total:
+                    type: integer
+                    example: 3
+        "404":
+          description: Lounge owner not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "owner_not_found"
+                  message:
+                    type: string
+                    example: "Lounge owner not found"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
   /api/v1/lounge-owner/profile:
     get:
       summary: Get lounge owner profile
@@ -4108,11 +4463,11 @@ paths:
       summary: Get all active lounges (Public)
       description: |
         Retrieve all active and operational lounges - no authentication required.
-        
+
         **Query Parameters:**
         - `state`: Filter lounges by state/province (case-insensitive)
         - `limit`: Limit number of results (uses random ordering when specified)
-        
+
         **Default Behavior:**
         - Without parameters: Returns all active lounges ordered by name
         - With `limit=5`: Returns 5 random lounges (for initial app load)
@@ -4178,7 +4533,8 @@ paths:
                     type: array
                     items:
                       type: string
-                    example: ["Central", "Eastern", "Northern", "Southern", "Western"]
+                    example:
+                      ["Central", "Eastern", "Northern", "Southern", "Western"]
                     description: List of state names with active lounges
                   total:
                     type: integer
@@ -4193,15 +4549,15 @@ paths:
       description: |
         Retrieve all active lounges that serve a specific bus stop.
         Used when passengers book a bus trip and want to find lounges at their boarding or alighting stop.
-        
+
         **Use Case:**
         - Passenger books bus from Colombo Fort to Kandy
         - App shows lounges near Colombo Fort (pre-trip) and Kandy (post-trip)
-        
+
         **Data Source:**
         - Joins `lounges` with `lounge_routes` table
         - Matches `stop_before_id` or `stop_after_id` to find relevant lounges
-        
+
         **No authentication required** - public endpoint for passengers.
       operationId: getLoungesByStop
       tags:
@@ -4247,15 +4603,15 @@ paths:
       description: |
         Retrieve all active lounges that serve stops along a specific bus route.
         Used to show all lounges available along the entire route.
-        
+
         **Use Case:**
         - Show all lounge options along the Colombo-Kandy route
         - Help passengers discover lounges they can use during their journey
-        
+
         **Data Source:**
         - Joins `lounges` with `lounge_routes` table
         - Matches `master_route_id` to find relevant lounges
-        
+
         **No authentication required** - public endpoint for passengers.
       operationId: getLoungesByRoute
       tags:
@@ -4300,17 +4656,17 @@ paths:
       summary: Get lounges near a passenger's stop (Public)
       description: |
         Retrieve lounges where the passenger's selected stop is within N stops of the lounge's location.
-        
+
         **How it works:**
         - Lounge is registered with `stop_before_id` and `stop_after_id` (where lounge is located)
         - Query compares passenger's stop `stop_order` with lounge's stops `stop_order`
         - Returns lounges where `|passenger_stop_order - lounge_stop_order| <= distance`
-        
+
         **Use Case:**
         - Passenger selects boarding stop "Colombo Fort" (stop_order: 1)
         - Lounge is between "Pettah" (stop_order: 2) and "Maradana" (stop_order: 3)
         - Distance = 2, so |1 - 2| = 1 ≤ 2 → Lounge is shown!
-        
+
         **No authentication required** - public endpoint for passengers.
       operationId: getLoungesNearStop
       tags:
@@ -4437,9 +4793,18 @@ paths:
           $ref: "#/components/responses/InternalServerError"
 
     get:
-      summary: Get staff for lounge
-      description: Get all staff members assigned to a specific lounge
-      operationId: getStaffByLounge
+      summary: Get staff for lounge with optional filtering
+      description: |
+        Get all staff members assigned to a specific lounge.
+
+        **Optional Filtering:** Use `approval_status` query parameter to filter staff.
+
+        **Examples:**
+        - `/lounges/{lounge_id}/staff` - Get all staff
+        - `/lounges/{lounge_id}/staff?approval_status=pending` - Get pending applications
+        - `/lounges/{lounge_id}/staff?approval_status=approved` - Get approved staff only
+        - `/lounges/{lounge_id}/staff?approval_status=declined` - Get declined applications
+      operationId: getStaffByLoungeWithFilter
       tags:
         - Lounge Owner
       security:
@@ -4448,9 +4813,18 @@ paths:
         - name: lounge_id
           in: path
           required: true
+          description: Lounge UUID
           schema:
             type: string
             format: uuid
+        - name: approval_status
+          in: query
+          required: false
+          description: Filter by approval status
+          schema:
+            type: string
+            enum: ["pending", "approved", "declined"]
+            example: "pending"
       responses:
         "200":
           description: Staff list retrieved
@@ -4465,6 +4839,11 @@ paths:
                       $ref: "#/components/schemas/LoungeStaff"
                   total:
                     type: integer
+                    example: 5
+                  filter_applied:
+                    type: string
+                    example: "pending"
+                    description: Shows which filter was applied (if any)
         "403":
           $ref: "#/components/responses/Forbidden"
         "500":
@@ -4473,10 +4852,126 @@ paths:
   # Note: UpdateStaffPermission endpoint removed - permission_type field no longer exists
   # Use users.roles array for permission management instead
 
+  /api/v1/lounges/{lounge_id}/staff/{staff_id}/approval:
+    put:
+      summary: Approve or decline staff application
+      description: |
+        Approve or decline a staff member's application to work at the lounge.
+
+        **Automatic Date Setting:**
+        - When `approved`: Sets `hired_date` to NOW() automatically
+        - When `declined`: Does not set hired_date
+
+        **Status Changes:**
+        - `approved` → `approvement_status='approved'`, `employment_status='active'`, `hired_date=NOW()`
+        - `declined` → `approvement_status='declined'`, `employment_status='inactive'`
+
+        **Required:** Lounge owner must be approved (`RequireApprovedLoungeOwner` middleware)
+      operationId: approveStaff
+      tags:
+        - Lounge Owner
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: lounge_id
+          in: path
+          required: true
+          description: Lounge UUID
+          schema:
+            type: string
+            format: uuid
+        - name: staff_id
+          in: path
+          required: true
+          description: Staff member UUID
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - approvement_status
+              properties:
+                approvement_status:
+                  type: string
+                  enum: ["approved", "declined"]
+                  example: "approved"
+                  description: Approval decision
+      responses:
+        "200":
+          description: Staff approval status updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Staff approval status updated successfully"
+                  staff_id:
+                    type: string
+                    format: uuid
+                  approvement_status:
+                    type: string
+                    example: "approved"
+                  employment_status:
+                    type: string
+                    example: "active"
+                  hired_date:
+                    type: string
+                    format: date-time
+                    example: "2026-01-23T10:30:00Z"
+                    description: Automatically set when approved
+                  updated_at:
+                    type: string
+                    format: date-time
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "invalid_status"
+                  message:
+                    type: string
+                    example: "Approval status must be 'approved' or 'declined'"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Staff not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "staff_not_found"
+                  message:
+                    type: string
+                    example: "Staff member not found"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
   /api/v1/lounges/{lounge_id}/staff/{staff_id}/status:
     put:
       summary: Update staff employment status
-      description: Update staff employment status (active, inactive, suspended)
+      description: |
+        Update staff employment status (active, inactive, suspended, terminated).
+
+        **Automatic Date Setting:**
+        - When status is set to `terminated`: Automatically sets `terminated_date` to NOW()
+        - For other statuses: Does not modify terminated_date
+
+        **Note:** This endpoint only updates employment status, not approval status.
+        Use `/lounges/{lounge_id}/staff/{staff_id}/approval` for approval/decline.
       operationId: updateStaffStatus
       tags:
         - Lounge Owner
@@ -4486,12 +4981,14 @@ paths:
         - name: lounge_id
           in: path
           required: true
+          description: Lounge UUID
           schema:
             type: string
             format: uuid
         - name: staff_id
           in: path
           required: true
+          description: Staff member UUID
           schema:
             type: string
             format: uuid
@@ -4506,10 +5003,31 @@ paths:
               properties:
                 employment_status:
                   type: string
-                  enum: ["active", "inactive", "terminated"]
+                  enum: ["active", "inactive", "suspended", "terminated"]
+                  example: "active"
+                  description: New employment status
       responses:
         "200":
-          description: Status updated
+          description: Status updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Staff status updated successfully"
+                  staff_id:
+                    type: string
+                    format: uuid
+                  employment_status:
+                    type: string
+                    example: "terminated"
+                  terminated_date:
+                    type: string
+                    format: date-time
+                    example: "2026-01-23T11:45:00Z"
+                    description: Automatically set when status is 'terminated'
         "403":
           $ref: "#/components/responses/Forbidden"
         "500":
@@ -4582,6 +5100,679 @@ paths:
                             type: string
         "404":
           $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  # ============================================================================
+  # Lounge Driver Management Endpoints
+  # ============================================================================
+  /api/v1/lounges/{lounge_id}/drivers:
+    get:
+      summary: Get all drivers for a lounge
+      description: Get all drivers assigned to a specific lounge
+      operationId: getDriversByLounge
+      tags:
+        - Lounge Owner
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: lounge_id
+          in: path
+          required: true
+          description: Lounge UUID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Drivers retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  drivers:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                          format: uuid
+                        lounge_id:
+                          type: string
+                          format: uuid
+                        full_name:
+                          type: string
+                          example: "John Driver"
+                        nic_number:
+                          type: string
+                          example: "199012345678"
+                        phone_number:
+                          type: string
+                          example: "+94771234567"
+                        license_number:
+                          type: string
+                          example: "B1234567"
+                        vehicle_type:
+                          type: string
+                          example: "Van"
+                        vehicle_number:
+                          type: string
+                          example: "ABC-1234"
+                        status:
+                          type: string
+                          enum: ["active", "inactive"]
+                          example: "active"
+                        created_at:
+                          type: string
+                          format: date-time
+                        updated_at:
+                          type: string
+                          format: date-time
+                  total:
+                    type: integer
+                    example: 3
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/v1/lounges/drivers:
+    post:
+      summary: Add driver to lounge
+      description: |
+        Add a new driver to a lounge.
+
+        **Required:** Lounge owner must be approved.
+      operationId: addDriver
+      tags:
+        - Lounge Owner
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - lounge_id
+                - full_name
+                - nic_number
+                - phone_number
+                - license_number
+                - vehicle_type
+                - vehicle_number
+              properties:
+                lounge_id:
+                  type: string
+                  format: uuid
+                  example: "550e8400-e29b-41d4-a716-446655440000"
+                full_name:
+                  type: string
+                  example: "John Driver"
+                nic_number:
+                  type: string
+                  example: "199012345678"
+                phone_number:
+                  type: string
+                  pattern: '^\+94[0-9]{9}$'
+                  example: "+94771234567"
+                license_number:
+                  type: string
+                  example: "B1234567"
+                vehicle_type:
+                  type: string
+                  example: "Van"
+                  description: Type of vehicle (Van, Car, Tuk-tuk, etc.)
+                vehicle_number:
+                  type: string
+                  example: "ABC-1234"
+      responses:
+        "201":
+          description: Driver added successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Driver added successfully"
+                  driver_id:
+                    type: string
+                    format: uuid
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/v1/lounges/{lounge_id}/drivers/{driver_id}:
+    put:
+      summary: Update driver information
+      description: |
+        Update driver details.
+
+        **Required:** Lounge owner must be approved.
+      operationId: updateDriver
+      tags:
+        - Lounge Owner
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: lounge_id
+          in: path
+          required: true
+          description: Lounge UUID
+          schema:
+            type: string
+            format: uuid
+        - name: driver_id
+          in: path
+          required: true
+          description: Driver UUID
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                full_name:
+                  type: string
+                phone_number:
+                  type: string
+                  pattern: '^\+94[0-9]{9}$'
+                license_number:
+                  type: string
+                vehicle_type:
+                  type: string
+                vehicle_number:
+                  type: string
+                status:
+                  type: string
+                  enum: ["active", "inactive"]
+      responses:
+        "200":
+          description: Driver updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Driver updated successfully"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+    delete:
+      summary: Remove driver from lounge
+      description: |
+        Remove a driver from the lounge.
+
+        **Required:** Lounge owner must be approved.
+      operationId: deleteDriver
+      tags:
+        - Lounge Owner
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: lounge_id
+          in: path
+          required: true
+          description: Lounge UUID
+          schema:
+            type: string
+            format: uuid
+        - name: driver_id
+          in: path
+          required: true
+          description: Driver UUID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Driver removed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Driver removed successfully"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  # ============================================================================
+  # Lounge Transport Location Management Endpoints
+  # ============================================================================
+  /api/v1/lounges/{lounge_id}/transport-locations:
+    get:
+      summary: Get all transport locations for a lounge
+      description: |
+        Get all transport destinations available from a lounge.
+
+        **Use case:** Shows destinations where lounge provides transport service.
+      operationId: getLoungeTransportLocations
+      tags:
+        - Lounge Owner
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: lounge_id
+          in: path
+          required: true
+          description: Lounge UUID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Transport locations retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  transport_locations:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                          format: uuid
+                        lounge_id:
+                          type: string
+                          format: uuid
+                        location_name:
+                          type: string
+                          example: "Bandaranaike International Airport"
+                        description:
+                          type: string
+                          example: "Direct transport to airport terminal"
+                        address:
+                          type: string
+                          example: "Katunayake"
+                        distance_km:
+                          type: number
+                          example: 35.5
+                          description: Distance from lounge in kilometers
+                        estimated_duration_minutes:
+                          type: integer
+                          example: 45
+                        status:
+                          type: string
+                          enum: ["active", "inactive"]
+                          example: "active"
+                        created_at:
+                          type: string
+                          format: date-time
+                        updated_at:
+                          type: string
+                          format: date-time
+                  total:
+                    type: integer
+                    example: 5
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/v1/lounges/transport-locations:
+    post:
+      summary: Add transport location to lounge
+      description: |
+        Add a new transport destination for a lounge.
+
+        **Required:** Lounge owner must be approved.
+      operationId: addLoungeTransportLocation
+      tags:
+        - Lounge Owner
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - lounge_id
+                - location_name
+                - address
+              properties:
+                lounge_id:
+                  type: string
+                  format: uuid
+                  example: "550e8400-e29b-41d4-a716-446655440000"
+                location_name:
+                  type: string
+                  example: "Bandaranaike International Airport"
+                description:
+                  type: string
+                  example: "Direct transport to airport terminal"
+                address:
+                  type: string
+                  example: "Katunayake"
+                distance_km:
+                  type: number
+                  example: 35.5
+                estimated_duration_minutes:
+                  type: integer
+                  example: 45
+      responses:
+        "201":
+          description: Transport location added successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Transport location added successfully"
+                  location_id:
+                    type: string
+                    format: uuid
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/v1/lounges/{lounge_id}/transport-locations/{location_id}:
+    put:
+      summary: Update transport location
+      description: |
+        Update transport location details.
+
+        **Required:** Lounge owner must be approved.
+      operationId: updateLoungeTransportLocation
+      tags:
+        - Lounge Owner
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: lounge_id
+          in: path
+          required: true
+          description: Lounge UUID
+          schema:
+            type: string
+            format: uuid
+        - name: location_id
+          in: path
+          required: true
+          description: Transport location UUID
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                location_name:
+                  type: string
+                description:
+                  type: string
+                address:
+                  type: string
+                distance_km:
+                  type: number
+                estimated_duration_minutes:
+                  type: integer
+                status:
+                  type: string
+                  enum: ["active", "inactive"]
+      responses:
+        "200":
+          description: Transport location updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Transport location updated successfully"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+    delete:
+      summary: Remove transport location from lounge
+      description: |
+        Remove a transport destination from lounge offerings.
+
+        **Required:** Lounge owner must be approved.
+      operationId: deleteLoungeTransportLocation
+      tags:
+        - Lounge Owner
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: lounge_id
+          in: path
+          required: true
+          description: Lounge UUID
+          schema:
+            type: string
+            format: uuid
+        - name: location_id
+          in: path
+          required: true
+          description: Transport location UUID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Transport location removed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Transport location removed successfully"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  # ============================================================================
+  # Lounge Transport Location Price Management Endpoints
+  # ============================================================================
+  /api/v1/lounges/{lounge_id}/transport-locations/{location_id}/prices:
+    get:
+      summary: Get transport pricing for a location
+      description: |
+        Get all pricing options for transport to a specific location.
+
+        **Use case:** Display transport prices to passengers.
+      operationId: getLoungeTransportLocationPrices
+      tags:
+        - Lounge Owner
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: lounge_id
+          in: path
+          required: true
+          description: Lounge UUID
+          schema:
+            type: string
+            format: uuid
+        - name: location_id
+          in: path
+          required: true
+          description: Transport location UUID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Prices retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  prices:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                          format: uuid
+                        vehicle_type:
+                          type: string
+                          example: "Van"
+                        max_passengers:
+                          type: integer
+                          example: 8
+                        price_per_person:
+                          type: string
+                          example: "2500.00"
+                          description: Price in LKR
+                        currency:
+                          type: string
+                          example: "LKR"
+                        is_active:
+                          type: boolean
+                          example: true
+                        created_at:
+                          type: string
+                          format: date-time
+                        updated_at:
+                          type: string
+                          format: date-time
+                  total:
+                    type: integer
+                    example: 3
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+    post:
+      summary: Set transport pricing for a location
+      description: |
+        Set or update pricing for transport to a specific location.
+
+        **Required:** Lounge owner must be approved.
+      operationId: setLoungeTransportLocationPrices
+      tags:
+        - Lounge Owner
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: lounge_id
+          in: path
+          required: true
+          description: Lounge UUID
+          schema:
+            type: string
+            format: uuid
+        - name: location_id
+          in: path
+          required: true
+          description: Transport location UUID
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - vehicle_type
+                - max_passengers
+                - price_per_person
+              properties:
+                vehicle_type:
+                  type: string
+                  example: "Van"
+                max_passengers:
+                  type: integer
+                  example: 8
+                  minimum: 1
+                price_per_person:
+                  type: string
+                  example: "2500.00"
+                  description: Price in LKR (DECIMAL as string)
+                is_active:
+                  type: boolean
+                  example: true
+                  default: true
+      responses:
+        "201":
+          description: Price set successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Transport price set successfully"
+                  price_id:
+                    type: string
+                    format: uuid
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Transport location not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "location_not_found"
+                  message:
+                    type: string
+                    example: "Transport location not found"
         "500":
           $ref: "#/components/responses/InternalServerError"
 
@@ -4805,13 +5996,13 @@ paths:
       description: |
         Create a new lounge booking for a passenger.
         Can include guest list and pre-ordered items.
-        
+
         **Pricing Types:**
         - 1 hour: Standard 1-hour access
         - 2 hours: Extended 2-hour access
         - 3 hours: Full 3-hour access  
         - until_bus: Access until bus departs
-        
+
         **Booking Status Flow:**
         pending → confirmed → checked_in → completed
                           ↘ cancelled / no_show
@@ -4853,7 +6044,7 @@ paths:
       description: |
         Retrieve all lounge bookings for the authenticated passenger.
         Returns both upcoming and past bookings with pagination support.
-        
+
         **Pagination:**
         - Use `page` and `limit` parameters to control results
         - Default: page=1, limit=20
@@ -4869,7 +6060,8 @@ paths:
           required: false
           schema:
             type: string
-            enum: [pending, confirmed, checked_in, completed, cancelled, no_show]
+            enum:
+              [pending, confirmed, checked_in, completed, cancelled, no_show]
           description: Filter by booking status
         - name: page
           in: query
@@ -4921,7 +6113,7 @@ paths:
       description: |
         Retrieve upcoming lounge bookings for the authenticated passenger.
         Only returns bookings with status pending, confirmed, or checked_in.
-        
+
         **Pagination:**
         - Use `page` and `limit` parameters to control results
         - Default: page=1, limit=50
@@ -5108,7 +6300,8 @@ paths:
           required: false
           schema:
             type: string
-            enum: [pending, confirmed, checked_in, completed, cancelled, no_show]
+            enum:
+              [pending, confirmed, checked_in, completed, cancelled, no_show]
         - name: date
           in: query
           required: false
@@ -5287,6 +6480,54 @@ paths:
         "500":
           $ref: "#/components/responses/InternalServerError"
 
+  /api/v1/lounge-bookings/{id}/orders:
+    get:
+      summary: Get orders for a booking
+      description: |
+        Get all food/beverage orders associated with a lounge booking.
+
+        **Use case:** View all orders placed during a lounge visit.
+      operationId: getBookingOrders
+      tags:
+        - Lounge Bookings
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Booking UUID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Orders retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  orders:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/LoungeOrder"
+                  total:
+                    type: integer
+                    example: 3
+                  total_amount:
+                    type: string
+                    example: "1250.00"
+                    description: Total amount of all orders in LKR
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
   /api/v1/lounge-orders:
     post:
       summary: Create lounge order
@@ -5332,7 +6573,7 @@ paths:
       description: |
         Update the status of a lounge order.
         Requires lounge owner or staff authentication.
-        
+
         **Order Status Flow:**
         pending → preparing → ready → delivered
                            ↘ cancelled
@@ -6481,7 +7722,7 @@ paths:
         1. seat_layout_id IS NOT NULL
         2. trip_seats records exist (auto-creates if missing)
         3. Seat layout has valid seats configured
-        
+
         Use the `/scheduled-trips/{id}/assign-seat-layout` endpoint to assign a seat 
         layout before publishing.
       operationId: publishScheduledTrip
@@ -8294,17 +9535,17 @@ paths:
       summary: Create booking intent
       description: |
         Creates a booking intent with TTL-based seat/lounge holding.
-        
+
         **Flow:**
         1. Validates seat/lounge availability
         2. Creates temporary holds (10 min TTL)
         3. Returns intent ID for payment initiation
-        
+
         **Intent Types:**
         - `bus_only`: Only bus seats
         - `lounge_only`: Only lounge booking (pre or post trip)
         - `bus_with_lounge`: Bus + lounge(s)
-        
+
         **Important:**
         - Seats are held for 10 minutes
         - Payment must be initiated before expiry
@@ -8486,7 +9727,7 @@ paths:
       description: |
         Adds pre-trip and/or post-trip lounge to an existing bus-only intent.
         This keeps the seat hold active and extends the expiration time.
-        
+
         **Use Case:**
         1. User creates bus intent (seats are held)
         2. User fills passenger details
@@ -8545,7 +9786,7 @@ paths:
       summary: Confirm booking after payment
       description: |
         Creates actual bookings from the intent after successful payment.
-        
+
         **Process:**
         1. Verifies payment reference
         2. Creates bus booking (if applicable)
@@ -8586,16 +9827,16 @@ paths:
       summary: PAYable payment gateway webhook (with audit trail)
       description: |
         Called by PAYable IPG to notify of payment status.
-        
+
         PAYable sends the uid and statusIndicator as query parameters.
         The backend then calls PAYable's CheckStatus API to verify the payment result.
-        
+
         **Industry-Standard Features:**
         - Full audit trail logged to `payment_audits` table
         - Idempotency (duplicate webhooks are detected and ignored)
         - Amount verification (expected vs received)
         - Correlation ID for request tracing
-        
+
         **Flow:**
         1. PAYable calls this endpoint with uid and statusIndicator query params
         2. Backend logs webhook receipt to audit table
@@ -8603,12 +9844,12 @@ paths:
         4. Amount verification: expected amount must match received amount
         5. If payment successful AND amounts match, booking is auto-confirmed
         6. All events logged to payment_audits for compliance/debugging
-        
+
         **Security:**
         - No JWT authentication (public endpoint)
         - Payment verification done via PAYable CheckStatus API
         - Amount mismatch blocks booking confirmation
-        
+
         **Audit Events Logged:**
         - `webhook_received` - Initial webhook receipt
         - `status_check_request` - Request to PAYable CheckStatus API
@@ -8694,7 +9935,7 @@ paths:
       description: |
         Redirect URL after PAYable payment completion.
         This endpoint handles the user redirect from PAYable after payment.
-        
+
         **Note:** Payment confirmation is handled via webhook, not this endpoint.
         This is primarily for user experience (showing success/failure page).
       operationId: paymentReturn
@@ -11769,7 +13010,17 @@ components:
           example: "900.00"
         status:
           type: string
-          enum: [pending, confirmed, checked_in, in_lounge, checked_out, completed, cancelled, no_show]
+          enum:
+            [
+              pending,
+              confirmed,
+              checked_in,
+              in_lounge,
+              checked_out,
+              completed,
+              cancelled,
+              no_show,
+            ]
           example: "confirmed"
         payment_status:
           type: string
@@ -12239,7 +13490,8 @@ components:
           format: uuid
         status:
           type: string
-          enum: [held, payment_pending, confirming, confirmed, expired, cancelled]
+          enum:
+            [held, payment_pending, confirming, confirmed, expired, cancelled]
         expires_at:
           type: string
           format: date-time
@@ -12330,7 +13582,8 @@ components:
           format: uuid
         status:
           type: string
-          enum: [held, payment_pending, confirming, confirmed, expired, cancelled]
+          enum:
+            [held, payment_pending, confirming, confirmed, expired, cancelled]
         expires_at:
           type: string
           format: date-time
@@ -12521,7 +13774,8 @@ components:
           enum: [bus_only, lounge_only, bus_with_lounge]
         status:
           type: string
-          enum: [held, payment_pending, confirming, confirmed, expired, cancelled]
+          enum:
+            [held, payment_pending, confirming, confirmed, expired, cancelled]
         bus_fare:
           type: number
           format: double
