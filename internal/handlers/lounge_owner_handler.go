@@ -5,8 +5,9 @@ import (
 	"log"
 	"net/http"
 	"strings"
-	"github.com/google/uuid"
+
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/smarttransit/sms-auth-backend/internal/database"
 	"github.com/smarttransit/sms-auth-backend/internal/middleware"
 	"github.com/smarttransit/sms-auth-backend/internal/models"
@@ -44,6 +45,7 @@ type SaveBusinessAndManagerInfoRequest struct {
 	ManagerFullName    string  `json:"manager_full_name" binding:"required"`
 	ManagerNICNumber   string  `json:"manager_nic_number" binding:"required"`
 	ManagerEmail       *string `json:"manager_email"`
+	District           string  `json:"district" binding:"required"`
 	ManagerNICFrontURL *string `json:"manager_nic_front_url"` // Optional: NIC front image URL from Supabase
 	ManagerNICBackURL  *string `json:"manager_nic_back_url"`  // Optional: NIC back image URL from Supabase
 }
@@ -101,6 +103,7 @@ func (h *LoungeOwnerHandler) SaveBusinessAndManagerInfo(c *gin.Context) {
 		req.ManagerFullName,
 		req.ManagerNICNumber,
 		req.ManagerEmail,
+		req.District,
 		req.ManagerNICFrontURL,
 		req.ManagerNICBackURL,
 	)
@@ -294,6 +297,7 @@ func (h *LoungeOwnerHandler) GetProfile(c *gin.Context) {
 		"manager_full_name":   getNullableString(owner.ManagerFullName),
 		"manager_nic_number":  getNullableString(owner.ManagerNICNumber),
 		"manager_email":       getNullableString(owner.ManagerEmail),
+		"district":            owner.District,
 		"registration_step":   owner.RegistrationStep,
 		"profile_completed":   owner.ProfileCompleted,
 		"verification_status": owner.VerificationStatus,
@@ -324,10 +328,10 @@ func (h *LoungeOwnerHandler) GetApprovedLoungeOwners(c *gin.Context) {
 
 	// Helper function to extract values from sql.NullString types
 	getNullableString := func(ns sql.NullString) *string {
-    if ns.Valid {
-        return &ns.String
-    }
-    return nil
+		if ns.Valid {
+			return &ns.String
+		}
+		return nil
 	}
 
 	// Convert to response format (only public info)
@@ -418,12 +422,12 @@ func (h *LoungeOwnerHandler) GetLoungesByOwnerID(c *gin.Context) {
 
 }
 
-func (h *LoungeOwnerHandler) GetApprovedLoungeOwnersByDsitrict(c *gin.Context){
+func (h *LoungeOwnerHandler) GetApprovedLoungeOwnersByDsitrict(c *gin.Context) {
 
-	// get approved lounge owners grouped by province
-	provinceGroups, err := h.loungeOwnerRepo.GetApprovedLoungeOwnersByDistrict()
+	// get approved lounge owners grouped by district
+	districtGroups, err := h.loungeOwnerRepo.GetApprovedLoungeOwnersByDistrict()
 	if err != nil {
-		log.Printf("ERROR: Failed to get approved lounge owners by province: %v", err)
+		log.Printf("ERROR: Failed to get approved lounge owners by district: %v", err)
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Error:   "database_error",
 			Message: "Failed to retrieve lounge owners",
@@ -439,26 +443,26 @@ func (h *LoungeOwnerHandler) GetApprovedLoungeOwnersByDsitrict(c *gin.Context){
 		return nil
 	}
 
-	// Convert to response format grouped by province
+	// Convert to response format grouped by district
 	response := make(map[string][]gin.H)
-	for province, owners := range provinceGroups {
-		response[province] = make([]gin.H, 0, len(owners))
+	for district, owners := range districtGroups {
+		response[district] = make([]gin.H, 0, len(owners))
 		for _, owner := range owners {
 			// Get lounge count for this owner
 			loungeCount, _ := h.loungeOwnerRepo.GetLoungeCount(owner.ID)
 
-			response[province] = append(response[province], gin.H{
-				"id":             owner.ID,
-				"business_name":  getNullableString(owner.BusinessName),
-				"manager_name":   getNullableString(owner.ManagerFullName),
-				"total_lounges":  loungeCount,
-				"province":       province,
+			response[district] = append(response[district], gin.H{
+				"id":            owner.ID,
+				"business_name": getNullableString(owner.BusinessName),
+				"manager_name":  getNullableString(owner.ManagerFullName),
+				"total_lounges": loungeCount,
+				"district":      district,
 			})
 		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"lounge_owners_by_province": response,
+		"lounge_owners_by_district": response,
 	})
 
 }

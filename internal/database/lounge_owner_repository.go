@@ -65,7 +65,7 @@ func (r *LoungeOwnerRepository) GetLoungeOwnerByUserID(userID uuid.UUID) (*model
 	query := `
 		SELECT 
 			id, user_id, business_name, business_license, 
-			manager_full_name, manager_nic_number, manager_email,
+			manager_full_name, manager_nic_number, manager_email, district,
 			registration_step, profile_completed,
 			verification_status, verification_notes, verified_at, verified_by,
 			created_at, updated_at
@@ -88,7 +88,7 @@ func (r *LoungeOwnerRepository) GetLoungeOwnerByID(id uuid.UUID) (*models.Lounge
 	query := `
 		SELECT 
 			id, user_id, business_name, business_license, 
-			manager_full_name, manager_nic_number, manager_email,
+			manager_full_name, manager_nic_number, manager_email, district,
 			registration_step, profile_completed,
 			verification_status, verification_notes, verified_at, verified_by,
 			created_at, updated_at
@@ -170,6 +170,7 @@ func (r *LoungeOwnerRepository) UpdateBusinessAndManagerInfoWithNIC(
 	managerFullName string,
 	managerNICNumber string,
 	managerEmail *string,
+	district string,
 	managerNICFrontURL *string,
 	managerNICBackURL *string,
 ) error {
@@ -189,9 +190,10 @@ func (r *LoungeOwnerRepository) UpdateBusinessAndManagerInfoWithNIC(
 			manager_full_name = $3,
 			manager_nic_number = $4,
 			manager_email = $5,
-			registration_step = $6,
+			district = $6,
+			registration_step = $7,
 			updated_at = NOW()
-		WHERE user_id = $7
+		WHERE user_id = $8
 	`
 
 	var emailValue interface{}
@@ -208,6 +210,7 @@ func (r *LoungeOwnerRepository) UpdateBusinessAndManagerInfoWithNIC(
 		managerFullName,
 		managerNICNumber,
 		emailValue,
+		district,
 		models.RegStepBusinessInfo,
 		userID,
 	)
@@ -415,7 +418,7 @@ func (r *LoungeOwnerRepository) GetApprovedLoungeOwners()([]models.LoungeOwner,e
 	return owners,nil
 }
 
-// get lounge owners by the province filter by province
+// get lounge owners by district, filtered by district
 func (r *LoungeOwnerRepository) GetApprovedLoungeOwnersByDistrict()(map[string][]models.LoungeOwner,error){
 
 	var owners []models.LoungeOwner
@@ -430,15 +433,15 @@ func (r *LoungeOwnerRepository) GetApprovedLoungeOwnersByDistrict()(map[string][
 		return nil, fmt.Errorf("failed to get approved lounge owners: %w", err)
 	}
 
-	// Group owners by province
-	provinceGroups := make(map[string][]models.LoungeOwner)
+	// Group owners by district
+	districtGroups := make(map[string][]models.LoungeOwner)
 	for _, owner := range owners {
-		province := owner.Province // Assumes Province field exists in LoungeOwner model
-		if province == "" {
-			province = "Other" // Default for owners without province
+		district := owner.District
+		if district == "" {
+			district = "Other" // Default for owners without district
 		}
-		provinceGroups[province] = append(provinceGroups[province], owner)
+		districtGroups[district] = append(districtGroups[district], owner)
 	}
 
-	return provinceGroups, nil
+	return districtGroups, nil
 }
