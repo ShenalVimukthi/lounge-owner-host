@@ -239,7 +239,7 @@ func main() {
 	loungeOwnerHandler := handlers.NewLoungeOwnerHandler(loungeOwnerRepository, userRepository,loungeRepository)//added lounge repository new
 	loungeRouteRepository := database.NewLoungeRouteRepository(sqlxDB.DB)
 	loungeHandler := handlers.NewLoungeHandler(loungeRepository, loungeOwnerRepository, loungeRouteRepository)
-	loungeStaffHandler := handlers.NewLoungeStaffHandler(loungeStaffRepository, loungeRepository, loungeOwnerRepository)
+	loungeStaffHandler := handlers.NewLoungeStaffHandler(loungeStaffRepository, loungeRepository, loungeOwnerRepository,userRepository)
 	loungeDriverHandler := handlers.NewLoungeDriverHandler(loungeOwnerRepository, loungeRepository, loungeDriverRepository)
 	loungeTransportLocationHandler := handlers.NewLoungeTransportLocationHandler(loungeOwnerRepository, loungeRepository, loungeTransportLocationRepository)
 	loungeTransportLocationPriceHandler := handlers.NewLoungeTransportLocationPriceHandler(loungeOwnerRepository,loungeRepository,loungeTransportLocationRepository,loungeTransportLocationPriceRepository)
@@ -632,6 +632,17 @@ func main() {
 		}
 		logger.Info("🏢 Lounge Owner routes registered successfully")
 
+		// Lounge Staff routes (protected)
+		logger.Info("🏨 Registering Lounge Staff routes...")
+		loungeStaff := v1.Group("/lounge-staff")
+		loungeStaff.Use(middleware.AuthMiddleware(jwtService))
+		{
+			// Profile endpoints
+			logger.Info("  ✅ GET /api/v1/lounge-staff/profile")
+			loungeStaff.GET("/profile", loungeStaffHandler.GetProfile)
+		}
+		logger.Info("🏨 Lounge Staff routes registered successfully")
+
 		// Lounge routes (protected)
 		logger.Info("🏨 Registering Lounge routes...")
 		lounges := v1.Group("/lounges")
@@ -667,8 +678,9 @@ func main() {
 				//there is a route missmatch in staff related functions will fix it soon
 				logger.Info("  ✅ GET /api/v1/lounges/:id/staff (read-only, no approval needed)")
 				loungesProtected.GET("/:id/staff", loungeStaffHandler.GetStaffByLounge)//This endpont will most probabbly removed (i kept it for now to backward compatability)
-				logger.Info("  ✅ POST /api/v1/lounges/:id/staff (requires approval)")
-				loungesProtected.POST("/:id/staff", middleware.RequireApprovedLoungeOwner(loungeOwnerRepository), loungeStaffHandler.AddStaff)
+				// This route is being changed (THE END POINT WAS CHANGED TO USE AddStaffToLoungeDirectByOwner HANDLER)
+				logger.Info("  ✅ POST /api/v1/lounges/:id/staff (requires approval)")//The :id here is the owner id not the lounge id it is passed through inputs 
+				loungesProtected.POST("/:id/staff", middleware.RequireApprovedLoungeOwner(loungeOwnerRepository), loungeStaffHandler.AddStaffToLoungeDirectByOwner)
 				// Permission management moved to users.roles array - removed permission_type field
 				logger.Info("  ✅ PUT /api/v1/lounges/:id/staff/:staff_id/status (requires approval)")
 				loungesProtected.PUT("/:id/staff/:staff_id/status", middleware.RequireApprovedLoungeOwner(loungeOwnerRepository), loungeStaffHandler.UpdateStaffStatus)

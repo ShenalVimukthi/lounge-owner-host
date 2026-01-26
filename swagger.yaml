@@ -3632,6 +3632,11 @@ paths:
                   format: email
                   example: "manager@grandhotel.com"
                   description: Manager's email address (optional)
+                district:
+                  type: string
+                  maxLength: 100
+                  example: "Colombo"
+                  description: District where the lounge is located (for geographic filtering and grouping)
       responses:
         "200":
           description: Business and manager information saved successfully

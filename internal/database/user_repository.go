@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"fmt"
 	"time"
-
 	"github.com/google/uuid"
 	"github.com/lib/pq"
 	"github.com/smarttransit/sms-auth-backend/internal/models"

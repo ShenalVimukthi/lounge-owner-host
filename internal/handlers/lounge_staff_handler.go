@@ -1,9 +1,13 @@
 package handlers
 
 import (
+	"database/sql"
 	"log"
 	"net/http"
-	"database/sql"
+
+	//"os/user"
+	"time"
+
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/smarttransit/sms-auth-backend/internal/database"
@@ -15,6 +19,8 @@ type LoungeStaffHandler struct {
 	staffRepo       *database.LoungeStaffRepository
 	loungeRepo      *database.LoungeRepository
 	loungeOwnerRepo *database.LoungeOwnerRepository
+	// adding user repo (THIS WILL HELP IN FINDING IF A USER IS ALREADY REGISTERD WHEN ADDING BY OWNERS SIDE)
+	userRepo *database.UserRepository
 }
 
 // NewLoungeStaffHandler creates a new lounge staff handler
@@ -22,12 +28,115 @@ func NewLoungeStaffHandler(
 	staffRepo *database.LoungeStaffRepository,
 	loungeRepo *database.LoungeRepository,
 	loungeOwnerRepo *database.LoungeOwnerRepository,
+	userRepo *database.UserRepository,
 ) *LoungeStaffHandler {
 	return &LoungeStaffHandler{
 		staffRepo:       staffRepo,
 		loungeRepo:      loungeRepo,
 		loungeOwnerRepo: loungeOwnerRepo,
+		userRepo:        userRepo,
 	}
+}
+
+// ===================================================================
+// GET PROFILE
+// ===================================================================
+
+// GetProfile handles GET /api/v1/lounge-staff/profile
+// Returns the current staff profile including approvement status, employment status, and details
+func (h *LoungeStaffHandler) GetProfile(c *gin.Context) {
+	// Get user context from JWT middleware
+	userCtx, exists := middleware.GetUserContext(c)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{
+			Error:   "unauthorized",
+			Message: "User context not found",
+		})
+		return
+	}
+
+	// Get lounge staff record for this user
+	staff, err := h.staffRepo.GetStaffByUserID(userCtx.UserID)
+	if err != nil {
+		log.Printf("ERROR: Failed to get lounge staff for user %s: %v", userCtx.UserID, err)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Error:   "database_error",
+			Message: "Failed to retrieve profile",
+		})
+		return
+	}
+
+	if staff == nil {
+		c.JSON(http.StatusNotFound, ErrorResponse{
+			Error:   "not_found",
+			Message: "Lounge staff profile not found",
+		})
+		return
+	}
+
+	// Get user record to fetch phone number
+	user, err := h.userRepo.GetUserByID(userCtx.UserID)
+	if err != nil {
+		log.Printf("ERROR: Failed to get user for staff %s: %v", userCtx.UserID, err)
+		// Continue anyway, phone is optional in response
+	}
+
+	// Get lounge information
+	lounge, err := h.loungeRepo.GetLoungeByID(staff.LoungeID)
+	if err != nil {
+		log.Printf("ERROR: Failed to get lounge for staff %s: %v", staff.ID, err)
+		// Don't fail if lounge fetch fails, continue with staff data
+	}
+
+	// Helper function to extract values from sql.Null* types
+	getNullableString := func(ns sql.NullString) *string {
+		if ns.Valid {
+			return &ns.String
+		}
+		return nil
+	}
+
+	getNullableTime := func(nt sql.NullTime) *string {
+		if nt.Valid {
+			timeStr := nt.Time.Format("2006-01-02T15:04:05Z07:00")
+			return &timeStr
+		}
+		return nil
+	}
+
+	// Build response
+	response := gin.H{
+		"id":      staff.ID,
+		"user_id": staff.UserID,
+		"phone": func() *string {
+			if user != nil {
+				return &user.Phone
+			}
+			return nil
+		}(),
+		"lounge_id":          staff.LoungeID,
+		"full_name":          getNullableString(staff.FullName),
+		"nic_number":         getNullableString(staff.NICNumber),
+		"email":              getNullableString(staff.Email),
+		"profile_completed":  staff.ProfileCompleted,
+		"approvement_status": staff.ApprovementStatus,
+		"employment_status":  staff.EmploymentStatus,
+		"hired_date":         getNullableTime(staff.HiredDate),
+		"terminated_date":    getNullableTime(staff.TerminatedDate),
+		"notes":              getNullableString(staff.Notes),
+		"created_at":         staff.CreatedAt,
+		"updated_at":         staff.UpdatedAt,
+	}
+
+	// Add lounge information if available
+	if lounge != nil {
+		response["lounge"] = gin.H{
+			"id":     lounge.ID,
+			"status": lounge.Status,
+		}
+	}
+
+	c.JSON(http.StatusOK, response)
 }
 
 // ===================================================================
@@ -44,13 +153,85 @@ type ApproveStaffRequest struct {
 	ApprovementStatus string `json:"approvement_status" binding:"required,oneof=approved declined"`
 }
 
+// Direct staff add request (FOR OWNER TO ADD STAFF DIRECTLY)
+type AddStaffToLoungeDirectByOwnerRequest struct {
+	LoungeID  uuid.UUID `json:"lounge_id" binding:"required"` //added loungeID inorder to assing the staff to respective lounge
+	FullName  string    `json:"full_name" binding:"required"`
+	NICNumber string    `json:"nic_number" binding:"required"`
+	Email     string    `json:"email" binding:"required,email"`
+	Phone     string    `json:"phone" binding:"required"` // Phone for user lookup or creation
+}
+
+// DirectAddStaffResponse represents the response after adding staff
+type AddStaffToLoungeDirectByOwnerResponse struct {
+	ID                uuid.UUID `json:"id"`
+	LoungeID          uuid.UUID `json:"lounge_id"`
+	UserID            uuid.UUID `json:"user_id"`
+	FullName          string    `json:"full_name"`
+	NICNumber         string    `json:"nic_number"`
+	Email             string    `json:"email"`
+	ProfileCompleted  bool      `json:"profile_completed"`
+	ApprovementStatus string    `json:"approvement_status"`
+	EmploymentStatus  string    `json:"employment_status"`
+	HiredDate         time.Time `json:"hired_date"`
+	CreatedAt         time.Time `json:"created_at"`
+	UpdatedAt         time.Time `json:"updated_at"`
+	Message           string    `json:"message"`
+}
+
 // AddStaff handles POST /api/v1/lounges/:id/:lounge_id/staff == edited added lounge_id here
 // Owner approve staff requests and make staff employement status to approved which is originally pending => (SO NO IMPLEMENTATION HERE TO ADD STAFF)
-func (h *LoungeStaffHandler) AddStaff(c *gin.Context) {
-	c.JSON(http.StatusNotImplemented, ErrorResponse{
-		Error:   "no implementation in this handler ",
-		Message: "Staff invitation feature is not using now",
-	})
+func (h *LoungeStaffHandler) AddStaffToLoungeDirectByOwner(c *gin.Context) {
+
+	// Get user context from JWT middleware
+	userCtx, exists := middleware.GetUserContext(c)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{
+			Error:   "unauthorized",
+			Message: "User context not found",
+		})
+		return
+	}
+
+	// Parse request body
+	var req AddStaffToLoungeDirectByOwnerRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Error:   "validation_error",
+			Message: "Invalid request body: " + err.Error(),
+		})
+		return
+	}
+
+	// Verify the user is a lounge owner
+	owner, err := h.loungeOwnerRepo.GetLoungeOwnerByUserID(userCtx.UserID)
+	if err != nil || owner == nil {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{
+			Error:   "unauthorized",
+			Message: "Only lounge owners can add staff",
+		})
+		return
+	}
+
+	// // Get the lounge to verify ownership
+	// lounge, err := h.loungeRepo.GetLoungeByID(loungeID)
+	// if err != nil || lounge == nil {
+	// 	c.JSON(http.StatusNotFound, ErrorResponse{
+	// 		Error:   "not_found",
+	// 		Message: "Lounge not found",
+	// 	})
+	// 	return
+	// }
+
+	// // Verify the user owns this lounge
+	// if lounge.LoungeOwnerID != owner.ID {
+	// 	c.JSON(http.StatusForbidden, ErrorResponse{
+	// 		Error:   "forbidden",
+	// 		Message: "You don't have permission to add staff to this lounge",
+	// 	})
+	// 	return
+	// }
+
 }
 
 // ===================================================================
@@ -394,9 +575,9 @@ func (h *LoungeStaffHandler) GetMyStaffProfile(c *gin.Context) {
 }
 
 // ApproveStaff handles PUT /api/v1/lounges/:lounge_id/staff/:staff_id/approval
-// handler to handle the staff approvement status 
+// handler to handle the staff approvement status
 func (h *LoungeStaffHandler) ApproveStaff(c *gin.Context) {
-	
+
 	// Get user context from JWT middleware
 	userCtx, exists := middleware.GetUserContext(c)
 	if !exists {
@@ -438,7 +619,6 @@ func (h *LoungeStaffHandler) ApproveStaff(c *gin.Context) {
 		})
 		return
 	}
-
 
 	// Get the lounge to verify ownership
 	lounge, err := h.loungeRepo.GetLoungeByID(loungeID)
@@ -535,20 +715,20 @@ func (h *LoungeStaffHandler) ApproveStaff(c *gin.Context) {
 
 	log.Printf("INFO: Staff %s approval status updated to %s by owner %s",
 		staffID, req.ApprovementStatus, userCtx.UserID)
-	
+
 	c.JSON(http.StatusOK, gin.H{
-		"message":              "Staff approval status updated successfully",
-		"staff_id":             updatedStaff.ID,
-		"approvement_status":   updatedStaff.ApprovementStatus,
-		"employment_status":    updatedStaff.EmploymentStatus,
-		"updated_at":           updatedStaff.UpdatedAt,
+		"message":            "Staff approval status updated successfully",
+		"staff_id":           updatedStaff.ID,
+		"approvement_status": updatedStaff.ApprovementStatus,
+		"employment_status":  updatedStaff.EmploymentStatus,
+		"updated_at":         updatedStaff.UpdatedAt,
 	})
 }
 
 // GetStaffByLoungeWithApprovalFilter handles GET /api/v1/lounges/:id/staff with optional status filter
-// This can be used to get staffData based on filter conditions like Query params: ?approval_status=pending|approved|declined 
-func (h *LoungeStaffHandler) GetStaffByLoungeWithApprovalFilter(c *gin.Context){
-	
+// This can be used to get staffData based on filter conditions like Query params: ?approval_status=pending|approved|declined
+func (h *LoungeStaffHandler) GetStaffByLoungeWithApprovalFilter(c *gin.Context) {
+
 	// Get user context from JWT middleware
 	userCtx, exists := middleware.GetUserContext(c)
 	if !exists {
@@ -603,9 +783,9 @@ func (h *LoungeStaffHandler) GetStaffByLoungeWithApprovalFilter(c *gin.Context){
 	var approvementStatusFilter *string
 	if approvementStatusParam != "" {
 		validStatuses := map[string]bool{
-			"pending":   true,
-			"approved":  true,
-			"declined":  true,
+			"pending":  true,
+			"approved": true,
+			"declined": true,
 		}
 		if !validStatuses[approvementStatusParam] {
 			c.JSON(http.StatusBadRequest, ErrorResponse{
@@ -640,15 +820,15 @@ func (h *LoungeStaffHandler) GetStaffByLoungeWithApprovalFilter(c *gin.Context){
 	response := make([]gin.H, 0, len(staff))
 	for _, s := range staff {
 		response = append(response, gin.H{
-			"id":                   s.ID,
-			"lounge_id":            s.LoungeID,
-			"first_name":           getNullableString(s.FullName),
-			"nic_number":           getNullableString(s.NICNumber),
-			"email":                getNullableString(s.Email),
-			"approvement_status":   s.ApprovementStatus,
-			"employment_status":    s.EmploymentStatus,
-			"created_at":           s.CreatedAt,
-			"updated_at":           s.UpdatedAt,
+			"id":                 s.ID,
+			"lounge_id":          s.LoungeID,
+			"first_name":         getNullableString(s.FullName),
+			"nic_number":         getNullableString(s.NICNumber),
+			"email":              getNullableString(s.Email),
+			"approvement_status": s.ApprovementStatus,
+			"employment_status":  s.EmploymentStatus,
+			"created_at":         s.CreatedAt,
+			"updated_at":         s.UpdatedAt,
 		})
 	}
 

@@ -372,3 +372,60 @@ func (r *LoungeStaffRepository) GetStaffByIDWithDetails(staffID uuid.UUID) (*mod
 
 	return &staff, nil
  }
+
+// AddStaffToLoungeDirect
+func (r *LoungeStaffRepository) AddStaffToLoungeDirectByOwner(
+	loungeID uuid.UUID,
+	userID uuid.UUID,
+	fullName string,
+	nicNumber string,
+	contactNo string,
+	email string,
+)(*models.LoungeStaff, error){
+
+	staff := &models.LoungeStaff{
+		ID: uuid.New(),
+		LoungeID:  loungeID,
+		UserID:    userID,
+		FullName:  sql.NullString{String:  fullName, Valid: fullName !=""},
+		NICNumber: sql.NullString{String: nicNumber, Valid: nicNumber!=""},
+		Email:     sql.NullString{String: email, Valid: email != ""},
+		ProfileCompleted:   true,
+		ApprovementStatus:  models.LoungeStaffApproveStatusApproved,// Approved immediately
+		EmploymentStatus:   models.LoungeStaffEmploymentActive,  // Active immediately
+		HiredDate:          sql.NullTime{Time: time.Now(), Valid: true}, // Current date/time
+		CreatedAt:          time.Now(),
+		UpdatedAt:          time.Now(),
+	}
+
+	query := `
+		INSERT INTO lounge_staff (
+			id, lounge_id, user_id, full_name, nic_number, email,
+			profile_completed, approvement_status, employment_status,
+			hired_date, created_at, updated_at
+		)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+		RETURNING id, created_at, updated_at
+	`
+	err := r.db.QueryRowx(
+		query,
+		staff.ID,
+		staff.LoungeID,
+		staff.UserID,
+		staff.FullName,
+		staff.NICNumber,
+		staff.Email,
+		staff.ProfileCompleted,
+		staff.ApprovementStatus,
+		staff.EmploymentStatus,
+		staff.HiredDate,
+		staff.CreatedAt,
+		staff.UpdatedAt,
+	).Scan(&staff.ID, &staff.CreatedAt, &staff.UpdatedAt)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to add staff with approval: %w", err)
+	}
+
+	return staff, nil
+}

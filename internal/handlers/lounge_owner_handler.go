@@ -265,6 +265,13 @@ func (h *LoungeOwnerHandler) GetProfile(c *gin.Context) {
 		return
 	}
 
+	// Get user record to fetch phone number
+	user, err := h.userRepo.GetUserByID(userCtx.UserID)
+	if err != nil {
+		log.Printf("ERROR: Failed to get user for owner %s: %v", userCtx.UserID, err)
+		// Continue anyway, phone is optional in response
+	}
+
 	// 🔍 DEBUG: Log what database returns
 	log.Printf("🔍 GET PROFILE - User: %s, RegistrationStep: %s, ProfileCompleted: %t",
 		userCtx.UserID, owner.RegistrationStep, owner.ProfileCompleted)
@@ -292,6 +299,7 @@ func (h *LoungeOwnerHandler) GetProfile(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"id":                  owner.ID,
 		"user_id":             owner.UserID,
+		"phone":               func() *string { if user != nil { return &user.Phone } ; return nil }(),
 		"business_name":       getNullableString(owner.BusinessName),
 		"business_license":    getNullableString(owner.BusinessLicense),
 		"manager_full_name":   getNullableString(owner.ManagerFullName),
