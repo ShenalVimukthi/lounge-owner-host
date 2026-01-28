@@ -239,7 +239,7 @@ func main() {
 	loungeOwnerHandler := handlers.NewLoungeOwnerHandler(loungeOwnerRepository, userRepository,loungeRepository)//added lounge repository new
 	loungeRouteRepository := database.NewLoungeRouteRepository(sqlxDB.DB)
 	loungeHandler := handlers.NewLoungeHandler(loungeRepository, loungeOwnerRepository, loungeRouteRepository)
-	loungeStaffHandler := handlers.NewLoungeStaffHandler(loungeStaffRepository, loungeRepository, loungeOwnerRepository,userRepository)
+	loungeStaffHandler := handlers.NewLoungeStaffHandler(loungeStaffRepository, loungeRepository, loungeOwnerRepository,userRepository,phoneValidator)
 	loungeDriverHandler := handlers.NewLoungeDriverHandler(loungeOwnerRepository, loungeRepository, loungeDriverRepository)
 	loungeTransportLocationHandler := handlers.NewLoungeTransportLocationHandler(loungeOwnerRepository, loungeRepository, loungeTransportLocationRepository)
 	loungeTransportLocationPriceHandler := handlers.NewLoungeTransportLocationPriceHandler(loungeOwnerRepository,loungeRepository,loungeTransportLocationRepository,loungeTransportLocationPriceRepository)
@@ -678,9 +678,8 @@ func main() {
 				//there is a route missmatch in staff related functions will fix it soon
 				logger.Info("  ✅ GET /api/v1/lounges/:id/staff (read-only, no approval needed)")
 				loungesProtected.GET("/:id/staff", loungeStaffHandler.GetStaffByLounge)//This endpont will most probabbly removed (i kept it for now to backward compatability)
-				// This route is being changed (THE END POINT WAS CHANGED TO USE AddStaffToLoungeDirectByOwner HANDLER)
-				logger.Info("  ✅ POST /api/v1/lounges/:id/staff (requires approval)")//The :id here is the owner id not the lounge id it is passed through inputs 
-				loungesProtected.POST("/:id/staff", middleware.RequireApprovedLoungeOwner(loungeOwnerRepository), loungeStaffHandler.AddStaffToLoungeDirectByOwner)
+				logger.Info("  ✅ POST /api/v1/lounges/:id/staff/direct-add (owner can directly add staff) (requires approval)")
+				loungesProtected.POST(":id/staff/direct-add",middleware.RequireApprovedLoungeOwner(loungeOwnerRepository),loungeStaffHandler.AddStaffToLoungeDirectByOwner)
 				// Permission management moved to users.roles array - removed permission_type field
 				logger.Info("  ✅ PUT /api/v1/lounges/:id/staff/:staff_id/status (requires approval)")
 				loungesProtected.PUT("/:id/staff/:staff_id/status", middleware.RequireApprovedLoungeOwner(loungeOwnerRepository), loungeStaffHandler.UpdateStaffStatus)
@@ -754,6 +753,7 @@ func main() {
 			loungesProtectedProducts.GET("/:id/bookings", loungeBookingHandler.GetLoungeBookingsForOwner)
 			logger.Info("  ✅ GET /api/v1/lounges/:id/bookings/today (owner/staff, read-only)")
 			loungesProtectedProducts.GET("/:id/bookings/today", loungeBookingHandler.GetTodaysBookings)
+
 
 		}
 

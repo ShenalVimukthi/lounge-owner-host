@@ -12,6 +12,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/smarttransit/sms-auth-backend/internal/database"
 	"github.com/smarttransit/sms-auth-backend/internal/middleware"
+
+	// importing validator
+	"github.com/smarttransit/sms-auth-backend/pkg/validator"
+	// import models
+	"github.com/smarttransit/sms-auth-backend/internal/models"
 )
 
 // LoungeStaffHandler handles lounge staff-related HTTP requests
@@ -21,6 +26,8 @@ type LoungeStaffHandler struct {
 	loungeOwnerRepo *database.LoungeOwnerRepository
 	// adding user repo (THIS WILL HELP IN FINDING IF A USER IS ALREADY REGISTERD WHEN ADDING BY OWNERS SIDE)
 	userRepo *database.UserRepository
+	// adding phone validator to validate phone numbers directly inside the handler(for owner to directly add staff)
+	phoneValidator *validator.PhoneValidator
 }
 
 // NewLoungeStaffHandler creates a new lounge staff handler
@@ -29,12 +36,14 @@ func NewLoungeStaffHandler(
 	loungeRepo *database.LoungeRepository,
 	loungeOwnerRepo *database.LoungeOwnerRepository,
 	userRepo *database.UserRepository,
+	phoneValidator *validator.PhoneValidator,
 ) *LoungeStaffHandler {
 	return &LoungeStaffHandler{
 		staffRepo:       staffRepo,
 		loungeRepo:      loungeRepo,
 		loungeOwnerRepo: loungeOwnerRepo,
 		userRepo:        userRepo,
+		phoneValidator:  phoneValidator,
 	}
 }
 
@@ -155,11 +164,10 @@ type ApproveStaffRequest struct {
 
 // Direct staff add request (FOR OWNER TO ADD STAFF DIRECTLY)
 type AddStaffToLoungeDirectByOwnerRequest struct {
-	LoungeID  uuid.UUID `json:"lounge_id" binding:"required"` //added loungeID inorder to assing the staff to respective lounge
-	FullName  string    `json:"full_name" binding:"required"`
-	NICNumber string    `json:"nic_number" binding:"required"`
-	Email     string    `json:"email" binding:"required,email"`
-	Phone     string    `json:"phone" binding:"required"` // Phone for user lookup or creation
+	LoungeID  string `json:"lounge_id" binding:"required"` //added loungeID inorder to assing the staff to respective lounge
+	FullName  string `json:"full_name" binding:"required"`
+	NICNumber string `json:"nic_number" binding:"required"`
+	Phone     string `json:"phone" binding:"required"` // Phone for user lookup or creation
 }
 
 // DirectAddStaffResponse represents the response after adding staff
@@ -169,18 +177,18 @@ type AddStaffToLoungeDirectByOwnerResponse struct {
 	UserID            uuid.UUID `json:"user_id"`
 	FullName          string    `json:"full_name"`
 	NICNumber         string    `json:"nic_number"`
-	Email             string    `json:"email"`
 	ProfileCompleted  bool      `json:"profile_completed"`
 	ApprovementStatus string    `json:"approvement_status"`
 	EmploymentStatus  string    `json:"employment_status"`
 	HiredDate         time.Time `json:"hired_date"`
 	CreatedAt         time.Time `json:"created_at"`
 	UpdatedAt         time.Time `json:"updated_at"`
-	Message           string    `json:"message"`
+	IsNewUser         bool      `json:"is_new_user"`
+	Message           string    `json:"message"` //kept for messages(if not needed delete in future)
 }
 
-// AddStaff handles POST /api/v1/lounges/:id/:lounge_id/staff == edited added lounge_id here
-// Owner approve staff requests and make staff employement status to approved which is originally pending => (SO NO IMPLEMENTATION HERE TO ADD STAFF)
+// AddStaff handles POST /api/v1/lounges/:id/staff/direct-add
+// This will only be used by lounge owner inorder to add staff directly to the lounge (No OTP verification and stuff)
 func (h *LoungeStaffHandler) AddStaffToLoungeDirectByOwner(c *gin.Context) {
 
 	// Get user context from JWT middleware
@@ -203,6 +211,16 @@ func (h *LoungeStaffHandler) AddStaffToLoungeDirectByOwner(c *gin.Context) {
 		return
 	}
 
+	// Parse lounge ID directly from the request struct
+	loungeID, err := uuid.Parse(req.LoungeID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Error:   "invalid_lounge_id",
+			Message: "Invalid lounge ID format",
+		})
+		return
+	}
+
 	// Verify the user is a lounge owner
 	owner, err := h.loungeOwnerRepo.GetLoungeOwnerByUserID(userCtx.UserID)
 	if err != nil || owner == nil {
@@ -213,24 +231,121 @@ func (h *LoungeStaffHandler) AddStaffToLoungeDirectByOwner(c *gin.Context) {
 		return
 	}
 
-	// // Get the lounge to verify ownership
-	// lounge, err := h.loungeRepo.GetLoungeByID(loungeID)
-	// if err != nil || lounge == nil {
-	// 	c.JSON(http.StatusNotFound, ErrorResponse{
-	// 		Error:   "not_found",
-	// 		Message: "Lounge not found",
-	// 	})
-	// 	return
-	// }
+	// Get the lounge to verify ownership
+	lounge, err := h.loungeRepo.GetLoungeByID(loungeID)
+	if err != nil || lounge == nil {
+		c.JSON(http.StatusNotFound, ErrorResponse{
+			Error:   "not_found",
+			Message: "Lounge not found",
+		})
+		return
+	}
 
-	// // Verify the user owns this lounge
-	// if lounge.LoungeOwnerID != owner.ID {
-	// 	c.JSON(http.StatusForbidden, ErrorResponse{
-	// 		Error:   "forbidden",
-	// 		Message: "You don't have permission to add staff to this lounge",
-	// 	})
-	// 	return
-	// }
+	// Verify the user owns this lounge
+	if lounge.LoungeOwnerID != owner.ID {
+		c.JSON(http.StatusForbidden, ErrorResponse{
+			Error:   "forbidden",
+			Message: "You don't have permission to add staff to this lounge",
+		})
+		return
+	}
+
+	// if lounge is not approved send error
+	if lounge.Status != models.LoungeStatusApproved {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Error:   "lounge_not_approved",
+			Message: "Selected lounge is not available for staff registration",
+		})
+		return
+	}
+
+	// setting the phone_number
+	phone, err := h.phoneValidator.Validate(req.Phone)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Error:   "invalid_phone",
+			Message: err.Error(),
+		})
+		return
+	}
+
+	// user creation part STEP 01
+
+	// Check if a user with this phone already exists
+	existingUser, err := h.userRepo.GetUserByPhone(req.Phone)
+	if err != nil {
+		log.Printf("ERROR: Failed to check existing user for phone %s: %v", phone, err)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "user_check_failed", Message: "Failed to check user status"})
+		return
+	}
+
+	var user *models.User
+	isNew := false
+
+	if existingUser != nil {
+		// EXISTING USER - Update with new data
+		user = existingUser
+		// Add lounge_staff role if not present
+		hasRole := false
+		for _, r := range user.Roles {
+			if r == "lounge_staff" {
+				hasRole = true
+				break
+			}
+		}
+		if !hasRole {
+			if err := h.userRepo.AddRole(user.ID, "lounge_staff"); err != nil {
+				log.Printf("ERROR: Failed to add lounge_staff role: %v", err)
+			} else {
+				user.Roles = append(user.Roles, "lounge_staff")
+			}
+		}
+
+		// update the user profile data
+
+	} else {
+		// NEW USER - Create with basic data only (phone + role)
+		user, err = h.userRepo.CreateUserWithRole(phone, "lounge_staff")
+		if err != nil {
+			log.Printf("ERROR: Failed to create lounge staff user for phone %s: %v", phone, err)
+			c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "user_creation_failed", Message: "Failed to create user account"})
+			return
+		}
+		isNew = true
+	}
+
+	// create lounge_staff record STEP 02
+	staff, err := h.staffRepo.AddStaffToLoungeDirectByOwner(
+		loungeID,
+		user.ID,
+		req.FullName,
+		req.NICNumber,
+	)
+	if err != nil {
+		log.Printf("ERROR: Failed to add staff: %v", err)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Error:   "database_error",
+			Message: "Failed to add staff member",
+		})
+		return
+	}
+
+	// Return success response
+	c.JSON(http.StatusCreated, AddStaffToLoungeDirectByOwnerResponse{
+		ID:                staff.ID,
+		LoungeID:          staff.LoungeID,
+		UserID:            staff.UserID,
+		FullName:          staff.FullName.String,
+		NICNumber:         staff.NICNumber.String,
+		ProfileCompleted:  staff.ProfileCompleted,
+		ApprovementStatus: string(staff.ApprovementStatus),
+		EmploymentStatus:  string(staff.EmploymentStatus),
+		HiredDate:         staff.HiredDate.Time,
+		CreatedAt:         staff.CreatedAt,
+		UpdatedAt:         staff.UpdatedAt,
+		IsNewUser:         isNew,
+		Message:           "Staff member and user account created successfully with immediate approval",
+	})
 
 }
 
