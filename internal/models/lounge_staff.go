@@ -24,7 +24,9 @@ type LoungeStaff struct {
 	ProfileCompleted bool `db:"profile_completed" json:"profile_completed"`
 
 	//NEW ADDITION => approvement status (owner approve by his app)
-	ApprovementStatus LoungeStaffApproveStatus `db:"approvement_status" json:"approvement_status"` // approved, declined, pending
+	// changing to approval_status 
+	//ApprovementStatus LoungeStaffApproveStatus `db:"approvement_status" json:"approvement_status"`
+	ApprovalStatus LoungeStaffApproveStatus `db:"approval_status" json:"approval_status"` // approved, declined, pending
 	// Employment Info
 	EmploymentStatus LoungeStaffEmploymentStatus `db:"employment_status" json:"employment_status"` // active, terminated, suspended
 	HiredDate        sql.NullTime                `db:"hired_date" json:"hired_date,omitempty"`

@@ -4,15 +4,12 @@ import (
 	"database/sql"
 	"log"
 	"net/http"
-
 	//"os/user"
 	"time"
-
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/smarttransit/sms-auth-backend/internal/database"
 	"github.com/smarttransit/sms-auth-backend/internal/middleware"
-
 	// importing validator
 	"github.com/smarttransit/sms-auth-backend/pkg/validator"
 	// import models
@@ -52,7 +49,7 @@ func NewLoungeStaffHandler(
 // ===================================================================
 
 // GetProfile handles GET /api/v1/lounge-staff/profile
-// Returns the current staff profile including approvement status, employment status, and details
+// Returns the current staff profile including approval status, employment status, and details
 func (h *LoungeStaffHandler) GetProfile(c *gin.Context) {
 	// Get user context from JWT middleware
 	userCtx, exists := middleware.GetUserContext(c)
@@ -128,7 +125,7 @@ func (h *LoungeStaffHandler) GetProfile(c *gin.Context) {
 		"nic_number":         getNullableString(staff.NICNumber),
 		"email":              getNullableString(staff.Email),
 		"profile_completed":  staff.ProfileCompleted,
-		"approvement_status": staff.ApprovementStatus,
+		"approval_status":    staff.ApprovalStatus,
 		"employment_status":  staff.EmploymentStatus,
 		"hired_date":         getNullableTime(staff.HiredDate),
 		"terminated_date":    getNullableTime(staff.TerminatedDate),
@@ -159,7 +156,7 @@ type AddStaffRequest struct {
 }
 
 type ApproveStaffRequest struct {
-	ApprovementStatus string `json:"approvement_status" binding:"required,oneof=approved declined"`
+	ApprovalStatus string `json:"approval_status" binding:"required,oneof=approved declined"`
 }
 
 // Direct staff add request (FOR OWNER TO ADD STAFF DIRECTLY)
@@ -178,7 +175,7 @@ type AddStaffToLoungeDirectByOwnerResponse struct {
 	FullName          string    `json:"full_name"`
 	NICNumber         string    `json:"nic_number"`
 	ProfileCompleted  bool      `json:"profile_completed"`
-	ApprovementStatus string    `json:"approvement_status"`
+	ApprovalStatus    string    `json:"approval_status"`
 	EmploymentStatus  string    `json:"employment_status"`
 	HiredDate         time.Time `json:"hired_date"`
 	CreatedAt         time.Time `json:"created_at"`
@@ -338,7 +335,7 @@ func (h *LoungeStaffHandler) AddStaffToLoungeDirectByOwner(c *gin.Context) {
 		FullName:          staff.FullName.String,
 		NICNumber:         staff.NICNumber.String,
 		ProfileCompleted:  staff.ProfileCompleted,
-		ApprovementStatus: string(staff.ApprovementStatus),
+		ApprovalStatus:    string(staff.ApprovalStatus),
 		EmploymentStatus:  string(staff.EmploymentStatus),
 		HiredDate:         staff.HiredDate.Time,
 		CreatedAt:         staff.CreatedAt,
@@ -793,7 +790,7 @@ func (h *LoungeStaffHandler) ApproveStaff(c *gin.Context) {
 
 	// Determine employment status based on approval decision
 	var employmentStatus *string
-	switch req.ApprovementStatus {
+	switch req.ApprovalStatus {
 	case "approved":
 		activeStatus := "active"
 		employmentStatus = &activeStatus
@@ -803,9 +800,9 @@ func (h *LoungeStaffHandler) ApproveStaff(c *gin.Context) {
 	}
 
 	// Update staff approval status
-	err = h.staffRepo.UpdateStaffApprovementStatus(
+	err = h.staffRepo.UpdateStaffApprovalStatus(
 		staffID,
-		req.ApprovementStatus,
+		req.ApprovalStatus,
 		employmentStatus,
 	)
 	if err != nil {
@@ -829,12 +826,12 @@ func (h *LoungeStaffHandler) ApproveStaff(c *gin.Context) {
 	}
 
 	log.Printf("INFO: Staff %s approval status updated to %s by owner %s",
-		staffID, req.ApprovementStatus, userCtx.UserID)
+		staffID, req.ApprovalStatus, userCtx.UserID)
 
 	c.JSON(http.StatusOK, gin.H{
 		"message":            "Staff approval status updated successfully",
 		"staff_id":           updatedStaff.ID,
-		"approvement_status": updatedStaff.ApprovementStatus,
+		"approval_status":    updatedStaff.ApprovalStatus,
 		"employment_status":  updatedStaff.EmploymentStatus,
 		"updated_at":         updatedStaff.UpdatedAt,
 	})
@@ -894,26 +891,26 @@ func (h *LoungeStaffHandler) GetStaffByLoungeWithApprovalFilter(c *gin.Context) 
 	}
 
 	// Get optional approval status filter from query params
-	approvementStatusParam := c.Query("approval_status")
-	var approvementStatusFilter *string
-	if approvementStatusParam != "" {
+	approvalStatusParam := c.Query("approval_status")
+	var approvalStatusFilter *string
+	if approvalStatusParam != "" {
 		validStatuses := map[string]bool{
 			"pending":  true,
 			"approved": true,
 			"declined": true,
 		}
-		if !validStatuses[approvementStatusParam] {
+		if !validStatuses[approvalStatusParam] {
 			c.JSON(http.StatusBadRequest, ErrorResponse{
 				Error:   "invalid_filter",
 				Message: "Invalid approval status filter. Use: pending, approved, or declined",
 			})
 			return
 		}
-		approvementStatusFilter = &approvementStatusParam
+		approvalStatusFilter = &approvalStatusParam
 	}
 
 	// Get staff with optional filter
-	staff, err := h.staffRepo.GetStaffByLoungeWithFilter(loungeID, approvementStatusFilter)
+	staff, err := h.staffRepo.GetStaffByLoungeWithFilter(loungeID, approvalStatusFilter)
 	if err != nil {
 		log.Printf("ERROR: Failed to get staff for lounge %s: %v", loungeID, err)
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
@@ -940,7 +937,7 @@ func (h *LoungeStaffHandler) GetStaffByLoungeWithApprovalFilter(c *gin.Context) 
 			"first_name":         getNullableString(s.FullName),
 			"nic_number":         getNullableString(s.NICNumber),
 			"email":              getNullableString(s.Email),
-			"approvement_status": s.ApprovementStatus,
+			"approval_status":    s.ApprovalStatus,
 			"employment_status":  s.EmploymentStatus,
 			"created_at":         s.CreatedAt,
 			"updated_at":         s.UpdatedAt,
@@ -950,7 +947,7 @@ func (h *LoungeStaffHandler) GetStaffByLoungeWithApprovalFilter(c *gin.Context) 
 	c.JSON(http.StatusOK, gin.H{
 		"staff":  response,
 		"total":  len(response),
-		"filter": approvementStatusFilter,
+		"filter": approvalStatusFilter,
 	})
 
 }

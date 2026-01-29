@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"fmt"
 	"time"
-
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 	"github.com/smarttransit/sms-auth-backend/internal/models"
@@ -24,7 +23,7 @@ func NewLoungeStaffRepository(db *sqlx.DB) *LoungeStaffRepository {
 func (r *LoungeStaffRepository) CreateLoungeStaff(userID uuid.UUID)(*models.LoungeStaff,error){
 	return nil, nil
 }
-//(ADD staff approvement_status to the table -> currently not implemented)
+//(ADD staff  approval_status to the table -> currently not implemented)
 // NEW METHOD TO ADD COMPLETE STAFF DETAILS (THE OLD WAS LEFT TO BACKEND COMPATABILITY)
 func (r *LoungeStaffRepository) AddStaffToLoungeWithCompleteData(
 	loungeID uuid.UUID,
@@ -80,6 +79,7 @@ func (r *LoungeStaffRepository) AddStaffToLoungeWithCompleteData(
     return staff, nil
 }
 
+// (THIS WILL BE REMOVED IF NOT NEEDED JUST KEPT FOR BACKWARD COMPATABILITY)
 // AddStaffToLounge adds a staff member to a lounge (staff is only approved by lounge owner - NO INVITATION)
 func (r *LoungeStaffRepository) AddStaffToLounge(
 	loungeID uuid.UUID,
@@ -281,17 +281,17 @@ func (r *LoungeStaffRepository) GetStaffWithUserDetails(staffID uuid.UUID) (map[
 	return result, nil
 }
 
-// Update staffApprovement status 
-func (r *LoungeStaffRepository) UpdateStaffApprovementStatus(
+// Update staffApproval status 
+func (r *LoungeStaffRepository) UpdateStaffApprovalStatus(
 	staffID uuid.UUID,
-	approvementStatus string,
+	approvalStatus string,
 	employmentStatus *string,
 	) error {
 
 	query := `
 		UPDATE lounge_staff
 		SET
-			approvement_status = $1,
+			approval_status = $1,
 			employment_status = COALESCE($2, employment_status),
 			hired_date = CASE
 				WHEN $1 = 'approved' THEN NOW()
@@ -303,7 +303,7 @@ func (r *LoungeStaffRepository) UpdateStaffApprovementStatus(
 
 	result, err := r.db.Exec(
 		query,
-		approvementStatus,
+		approvalStatus,
 		employmentStatus,
 		staffID,
 	)
@@ -324,10 +324,10 @@ func (r *LoungeStaffRepository) UpdateStaffApprovementStatus(
 	return nil
 }
 
-// function to get loungeStaff according the approvementStatus
+// function to get loungeStaff according the approvalStatus
 func (r *LoungeStaffRepository) GetStaffByLoungeWithFilter(
 	loungeID uuid.UUID,
-	approvementStatusFilter *string, // nil for all, or "pending", "approved", "declined"	
+	approvalStatusFilter *string, // nil for all, or "pending", "approved", "declined"	
 )([]models.LoungeStaff,error) {
 
 	var staff []models.LoungeStaff
@@ -338,9 +338,9 @@ func (r *LoungeStaffRepository) GetStaffByLoungeWithFilter(
 	`
 	args := []interface{}{loungeID}
 
-	if approvementStatusFilter != nil {
-		query += ` AND approvement_status = $2`
-		args = append(args, *approvementStatusFilter)
+	if approvalStatusFilter != nil {
+		query += ` AND approval_status = $2`
+		args = append(args, *approvalStatusFilter)
 	}
 
 	query += ` ORDER BY created_at DESC`
@@ -388,7 +388,7 @@ func (r *LoungeStaffRepository) AddStaffToLoungeDirectByOwner(
 		FullName:  sql.NullString{String:  fullName, Valid: fullName !=""},
 		NICNumber: sql.NullString{String: nicNumber, Valid: nicNumber!=""},
 		ProfileCompleted:   true,
-		ApprovementStatus:  models.LoungeStaffApproveStatusApproved,// Approved immediately
+		ApprovalStatus:     models.LoungeStaffApproveStatusApproved,// Approved immediately
 		EmploymentStatus:   models.LoungeStaffEmploymentActive,  // Active immediately
 		HiredDate:          sql.NullTime{Time: time.Now(), Valid: true}, // Current date/time
 		CreatedAt:          time.Now(),
@@ -398,7 +398,7 @@ func (r *LoungeStaffRepository) AddStaffToLoungeDirectByOwner(
 	query := `
 		INSERT INTO lounge_staff (
 			id, lounge_id, user_id, full_name, nic_number,
-			profile_completed, approvement_status, employment_status,
+			profile_completed, approval_status, employment_status,
 			hired_date, created_at, updated_at
 		)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
@@ -412,7 +412,7 @@ func (r *LoungeStaffRepository) AddStaffToLoungeDirectByOwner(
 		staff.FullName,
 		staff.NICNumber,
 		staff.ProfileCompleted,
-		staff.ApprovementStatus,
+		staff.ApprovalStatus,
 		staff.EmploymentStatus,
 		staff.HiredDate,
 		staff.CreatedAt,
