@@ -25,6 +25,8 @@ type LoungeStaffHandler struct {
 	userRepo *database.UserRepository
 	// adding phone validator to validate phone numbers directly inside the handler(for owner to directly add staff)
 	phoneValidator *validator.PhoneValidator
+	// adding loungeStaff repository
+	loungeStaffRepo *database.LoungeStaffRepository
 }
 
 // NewLoungeStaffHandler creates a new lounge staff handler
@@ -34,6 +36,7 @@ func NewLoungeStaffHandler(
 	loungeOwnerRepo *database.LoungeOwnerRepository,
 	userRepo *database.UserRepository,
 	phoneValidator *validator.PhoneValidator,
+	loungeStaffRepo *database.LoungeStaffRepository,
 ) *LoungeStaffHandler {
 	return &LoungeStaffHandler{
 		staffRepo:       staffRepo,
@@ -41,6 +44,7 @@ func NewLoungeStaffHandler(
 		loungeOwnerRepo: loungeOwnerRepo,
 		userRepo:        userRepo,
 		phoneValidator:  phoneValidator,
+		loungeStaffRepo: loungeStaffRepo,
 	}
 }
 
@@ -282,6 +286,17 @@ func (h *LoungeStaffHandler) AddStaffToLoungeDirectByOwner(c *gin.Context) {
 	if existingUser != nil {
 		// EXISTING USER - Update with new data
 		user = existingUser
+        
+		existingStaff, err := h.loungeStaffRepo.GetStaffByLoungeIDAndUserID(c.Request.Context(), loungeID, user.ID)
+		 if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to check existing staff"})
+			return
+		}
+		if existingStaff != nil {
+			c.JSON(http.StatusConflict, gin.H{"error": "Staff member already exists for this lounge"})
+			return
+		}
+
 		// Add lounge_staff role if not present
 		hasRole := false
 		for _, r := range user.Roles {

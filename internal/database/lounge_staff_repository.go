@@ -2,6 +2,7 @@ package database
 
 import (
 	"database/sql"
+	"context"
 	"fmt"
 	"time"
 	"github.com/google/uuid"
@@ -424,4 +425,18 @@ func (r *LoungeStaffRepository) AddStaffToLoungeDirectByOwner(
 	}
 
 	return staff, nil
+}
+
+// GetStaffByLoungeIDAndUserID retrieves a staff member by lounge ID and user ID
+func (r *LoungeStaffRepository) GetStaffByLoungeIDAndUserID(ctx context.Context, loungeID, userID uuid.UUID) (*models.LoungeStaff, error) {
+    var staff models.LoungeStaff
+    query := `SELECT * FROM lounge_staff WHERE lounge_id = $1 AND user_id = $2`
+    err := r.db.GetContext(ctx, &staff, query, loungeID, userID)
+    if err == sql.ErrNoRows {
+        return nil, nil
+    }
+    if err != nil {
+        return nil, err
+    }
+    return &staff, nil
 }
