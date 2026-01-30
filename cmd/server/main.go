@@ -676,8 +676,8 @@ func main() {
 
 				// Staff management for specific lounge (requires approval)
 				//there is a route missmatch in staff related functions will fix it soon
-				logger.Info("  ✅ GET /api/v1/lounges/:id/staff (read-only, no approval needed)")
-				loungesProtected.GET("/:id/staff", loungeStaffHandler.GetStaffByLounge)//This endpont will most probabbly removed (i kept it for now to backward compatability)
+				// logger.Info("  ✅ GET /api/v1/lounges/:id/staff (read-only, no approval needed)")
+				// loungesProtected.GET("/:id/staff", loungeStaffHandler.GetStaffByLounge)//This endpont will most probabbly removed (i kept it for now to backward compatability)
 				logger.Info("  ✅ POST /api/v1/lounges/:id/staff/direct-add (owner can directly add staff) (requires approval)")
 				loungesProtected.POST(":id/staff/direct-add",middleware.RequireApprovedLoungeOwner(loungeOwnerRepository),loungeStaffHandler.AddStaffToLoungeDirectByOwner)
 				// Permission management moved to users.roles array - removed permission_type field

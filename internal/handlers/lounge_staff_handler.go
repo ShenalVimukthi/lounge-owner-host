@@ -4,12 +4,15 @@ import (
 	"database/sql"
 	"log"
 	"net/http"
+
 	//"os/user"
 	"time"
+
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/smarttransit/sms-auth-backend/internal/database"
 	"github.com/smarttransit/sms-auth-backend/internal/middleware"
+
 	// importing validator
 	"github.com/smarttransit/sms-auth-backend/pkg/validator"
 	// import models
@@ -165,10 +168,10 @@ type ApproveStaffRequest struct {
 
 // Direct staff add request (FOR OWNER TO ADD STAFF DIRECTLY)
 type AddStaffToLoungeDirectByOwnerRequest struct {
-	LoungeID  string `json:"lounge_id" binding:"required"` //added loungeID inorder to assing the staff to respective lounge
-	FullName  string `json:"full_name" binding:"required"`
-	NICNumber string `json:"nic_number" binding:"required"`
-	Phone     string `json:"phone" binding:"required"` // Phone for user lookup or creation
+	LoungeID  string `json:"lounge_id" binding:"required"`   // UUID of the lounge
+	FullName  string `json:"full_name" binding:"required"`   // Staff member's full name
+	NICNumber string `json:"nic_number" binding:"required"`  // NIC for identification
+	Phone     string `json:"phone" binding:"required"`       // Phone for user lookup or creation
 }
 
 // DirectAddStaffResponse represents the response after adding staff
@@ -260,7 +263,7 @@ func (h *LoungeStaffHandler) AddStaffToLoungeDirectByOwner(c *gin.Context) {
 		return
 	}
 
-	// setting the phone_number
+	// Validate and normalize the phone number
 	phone, err := h.phoneValidator.Validate(req.Phone)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
@@ -270,10 +273,9 @@ func (h *LoungeStaffHandler) AddStaffToLoungeDirectByOwner(c *gin.Context) {
 		return
 	}
 
-	// user creation part STEP 01
-
+	// USER CREATION PART - STEP 01
 	// Check if a user with this phone already exists
-	existingUser, err := h.userRepo.GetUserByPhone(req.Phone)
+	existingUser, err := h.userRepo.GetUserByPhone(phone)
 	if err != nil {
 		log.Printf("ERROR: Failed to check existing user for phone %s: %v", phone, err)
 		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "user_check_failed", Message: "Failed to check user status"})
@@ -313,8 +315,6 @@ func (h *LoungeStaffHandler) AddStaffToLoungeDirectByOwner(c *gin.Context) {
 			}
 		}
 
-		// update the user profile data
-
 	} else {
 		// NEW USER - Create with basic data only (phone + role)
 		user, err = h.userRepo.CreateUserWithRole(phone, "lounge_staff")
@@ -326,7 +326,7 @@ func (h *LoungeStaffHandler) AddStaffToLoungeDirectByOwner(c *gin.Context) {
 		isNew = true
 	}
 
-	// create lounge_staff record STEP 02
+	// LOUNGE STAFF RECORD CREATION - STEP 02
 	staff, err := h.staffRepo.AddStaffToLoungeDirectByOwner(
 		loungeID,
 		user.ID,

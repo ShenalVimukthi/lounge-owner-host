@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"time"
+
 	"github.com/google/uuid"
 	"github.com/lib/pq"
 	"github.com/smarttransit/sms-auth-backend/internal/models"
@@ -280,6 +281,32 @@ func (r *UserRepository) UpdateUserNames(id uuid.UUID, firstName, lastName strin
 	result, err := r.db.Exec(query, firstName, lastName, time.Now(), id)
 	if err != nil {
 		return fmt.Errorf("failed to update user names: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("user not found")
+	}
+
+	return nil
+}
+
+// UpdateUserEmail updates only the email field of a user
+func (r *UserRepository) UpdateUserEmail(id uuid.UUID, email string) error {
+	query := `
+		UPDATE users
+		SET email = $1,
+		    updated_at = $2
+		WHERE id = $3
+	`
+
+	result, err := r.db.Exec(query, email, time.Now(), id)
+	if err != nil {
+		return fmt.Errorf("failed to update email: %w", err)
 	}
 
 	rowsAffected, err := result.RowsAffected()

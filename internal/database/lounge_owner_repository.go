@@ -105,6 +105,7 @@ func (r *LoungeOwnerRepository) GetLoungeOwnerByID(id uuid.UUID) (*models.Lounge
 	return &owner, nil
 }
 
+// DEPRECIATED FUNCTION NOT USED CURRENTLY
 // UpdateBusinessAndManagerInfo updates business and manager information (Step 1)
 func (r *LoungeOwnerRepository) UpdateBusinessAndManagerInfo(
 	userID uuid.UUID,

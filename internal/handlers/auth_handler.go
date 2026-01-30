@@ -4,6 +4,7 @@ import (
 	"log"
 	"net/http"
 	"time"
+
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid" //NEW ADDITION FOR VerifyOTPLoungeStaff handler
 	"github.com/smarttransit/sms-auth-backend/internal/config"
@@ -1111,11 +1112,24 @@ func (h *AuthHandler) VerifyOTPLoungeStaff(c *gin.Context, loungeStaffRepo *data
 		return
 	}
 
-	// Store refresh token (best-effort)
-	expiresAt := time.Now().Add(7 * 24 * time.Hour)
+	// Store refresh token in database
+	expiresAt := time.Now().Add(7 * 24 * time.Hour) // 7 days
 	deviceID := c.GetHeader("X-Device-ID")
 	deviceType := c.GetHeader("X-Device-Type")
-	_ = h.refreshTokenRepository.StoreRefreshToken(user.ID, refreshToken, deviceID, deviceType, clientIP, userAgent, expiresAt)
+
+	err = h.refreshTokenRepository.StoreRefreshToken(
+		user.ID,
+		refreshToken,
+		deviceID,
+		deviceType,
+		clientIP,
+		userAgent,
+		expiresAt,
+	)
+	if err != nil {
+		// Log error but don't fail the login
+		log.Printf("WARNING: Failed to store refresh token for user %s: %v", user.ID, err)
+	}
 
 	// Audit & session
 	h.auditService.LogOTPVerification(&user.ID, phone, true, 3-remainingBefore+1, clientIP, userAgent, "")

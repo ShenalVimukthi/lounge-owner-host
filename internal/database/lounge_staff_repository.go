@@ -1,10 +1,11 @@
 package database
 
 import (
-	"database/sql"
 	"context"
+	"database/sql"
 	"fmt"
 	"time"
+
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 	"github.com/smarttransit/sms-auth-backend/internal/models"
@@ -21,63 +22,65 @@ func NewLoungeStaffRepository(db *sqlx.DB) *LoungeStaffRepository {
 }
 
 // NEW ADDITION inoder to add_staff record
-func (r *LoungeStaffRepository) CreateLoungeStaff(userID uuid.UUID)(*models.LoungeStaff,error){
+func (r *LoungeStaffRepository) CreateLoungeStaff(userID uuid.UUID) (*models.LoungeStaff, error) {
 	return nil, nil
 }
-//(ADD staff  approval_status to the table -> currently not implemented)
+
 // NEW METHOD TO ADD COMPLETE STAFF DETAILS (THE OLD WAS LEFT TO BACKEND COMPATABILITY)
 func (r *LoungeStaffRepository) AddStaffToLoungeWithCompleteData(
 	loungeID uuid.UUID,
-    userID uuid.UUID,
+	userID uuid.UUID,
 	employmentStatus string,
-    fullName string,
-    nicNumber string,
-    email string,
-)(*models.LoungeStaff,error){
+	fullName string,
+	nicNumber string,
+	email string,
+) (*models.LoungeStaff, error) {
 
 	// feeding data into the variable
-	 staff := &models.LoungeStaff{
-        ID:               uuid.New(),
-        LoungeID:         loungeID,
-        UserID:           userID,
-        FullName:         sql.NullString{String: fullName, Valid: fullName != ""},
-        NICNumber:        sql.NullString{String: nicNumber, Valid: nicNumber != ""},
-        Email:            sql.NullString{String: email, Valid: email != ""},
-        ProfileCompleted: true, // Set to true since all data is provided
-        EmploymentStatus: models.LoungeStaffEmploymentStatus(employmentStatus),
-        CreatedAt:        time.Now(),
-        UpdatedAt:        time.Now(),
-    }
+	staff := &models.LoungeStaff{
+		ID:               uuid.New(),
+		LoungeID:         loungeID,
+		UserID:           userID,
+		FullName:         sql.NullString{String: fullName, Valid: fullName != ""},
+		NICNumber:        sql.NullString{String: nicNumber, Valid: nicNumber != ""},
+		Email:            sql.NullString{String: email, Valid: email != ""},
+		ProfileCompleted: true,                                   // Set to true since all data is provided
+		ApprovalStatus:   models.LoungeStaffApproveStatusPending, // Set approval status to pending
+		EmploymentStatus: models.LoungeStaffEmploymentStatus(employmentStatus),
+		CreatedAt:        time.Now(),
+		UpdatedAt:        time.Now(),
+	}
 
 	// database query
 	query := `
         INSERT INTO lounge_staff (
             id, lounge_id, user_id, full_name, nic_number, email,
-            profile_completed, employment_status, created_at, updated_at
+            profile_completed, approval_status, employment_status, created_at, updated_at
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
         RETURNING id, created_at, updated_at
     `
 
 	err := r.db.QueryRowx(
-        query,
-        staff.ID,
-        loungeID,
-        userID,
-        staff.FullName,
-        staff.NICNumber,
-        staff.Email,
-        staff.ProfileCompleted,
-        staff.EmploymentStatus,
-        staff.CreatedAt,
-        staff.UpdatedAt,
-    ).Scan(&staff.ID, &staff.CreatedAt, &staff.UpdatedAt)
+		query,
+		staff.ID,
+		loungeID,
+		userID,
+		staff.FullName,
+		staff.NICNumber,
+		staff.Email,
+		staff.ProfileCompleted,
+		staff.ApprovalStatus,
+		staff.EmploymentStatus,
+		staff.CreatedAt,
+		staff.UpdatedAt,
+	).Scan(&staff.ID, &staff.CreatedAt, &staff.UpdatedAt)
 
 	if err != nil {
-        return nil, fmt.Errorf("failed to add staff: %w", err)
-    }
+		return nil, fmt.Errorf("failed to add staff: %w", err)
+	}
 
-    return staff, nil
+	return staff, nil
 }
 
 // (THIS WILL BE REMOVED IF NOT NEEDED JUST KEPT FOR BACKWARD COMPATABILITY)
@@ -166,7 +169,8 @@ func (r *LoungeStaffRepository) GetStaffByUserID(userID uuid.UUID) (*models.Loun
 	}
 	return &staff, nil
 }
-// this must be work with update of user table paralalley 
+
+// this must be work with update of user table paralalley
 // UpdateStaffProfile updates staff profile information when they complete registration
 func (r *LoungeStaffRepository) UpdateStaffProfile(
 	userID uuid.UUID,
@@ -282,12 +286,12 @@ func (r *LoungeStaffRepository) GetStaffWithUserDetails(staffID uuid.UUID) (map[
 	return result, nil
 }
 
-// Update staffApproval status 
+// Update staffApproval status
 func (r *LoungeStaffRepository) UpdateStaffApprovalStatus(
 	staffID uuid.UUID,
 	approvalStatus string,
 	employmentStatus *string,
-	) error {
+) error {
 
 	query := `
 		UPDATE lounge_staff
@@ -328,8 +332,8 @@ func (r *LoungeStaffRepository) UpdateStaffApprovalStatus(
 // function to get loungeStaff according the approvalStatus
 func (r *LoungeStaffRepository) GetStaffByLoungeWithFilter(
 	loungeID uuid.UUID,
-	approvalStatusFilter *string, // nil for all, or "pending", "approved", "declined"	
-)([]models.LoungeStaff,error) {
+	approvalStatusFilter *string, // nil for all, or "pending", "approved", "declined"
+) ([]models.LoungeStaff, error) {
 
 	var staff []models.LoungeStaff
 
@@ -355,7 +359,7 @@ func (r *LoungeStaffRepository) GetStaffByLoungeWithFilter(
 }
 
 // GetStaffByIDWithDetails retrieves a staff member and verifies ownership
-func (r *LoungeStaffRepository) GetStaffByIDWithDetails(staffID uuid.UUID) (*models.LoungeStaff,error){
+func (r *LoungeStaffRepository) GetStaffByIDWithDetails(staffID uuid.UUID) (*models.LoungeStaff, error) {
 	var staff models.LoungeStaff
 
 	query := `
@@ -372,7 +376,7 @@ func (r *LoungeStaffRepository) GetStaffByIDWithDetails(staffID uuid.UUID) (*mod
 	}
 
 	return &staff, nil
- }
+}
 
 // AddStaffToLoungeDirectByOwner
 func (r *LoungeStaffRepository) AddStaffToLoungeDirectByOwner(
@@ -380,20 +384,20 @@ func (r *LoungeStaffRepository) AddStaffToLoungeDirectByOwner(
 	userID uuid.UUID,
 	fullName string,
 	nicNumber string,
-)(*models.LoungeStaff, error){
+) (*models.LoungeStaff, error) {
 
 	staff := &models.LoungeStaff{
-		ID: uuid.New(),
-		LoungeID:  loungeID,
-		UserID:    userID,
-		FullName:  sql.NullString{String:  fullName, Valid: fullName !=""},
-		NICNumber: sql.NullString{String: nicNumber, Valid: nicNumber!=""},
-		ProfileCompleted:   true,
-		ApprovalStatus:     models.LoungeStaffApproveStatusApproved,// Approved immediately
-		EmploymentStatus:   models.LoungeStaffEmploymentActive,  // Active immediately
-		HiredDate:          sql.NullTime{Time: time.Now(), Valid: true}, // Current date/time
-		CreatedAt:          time.Now(),
-		UpdatedAt:          time.Now(),
+		ID:               uuid.New(),
+		LoungeID:         loungeID,
+		UserID:           userID,
+		FullName:         sql.NullString{String: fullName, Valid: fullName != ""},
+		NICNumber:        sql.NullString{String: nicNumber, Valid: nicNumber != ""},
+		ProfileCompleted: true,
+		ApprovalStatus:   models.LoungeStaffApproveStatusApproved,     // Approved immediately
+		EmploymentStatus: models.LoungeStaffEmploymentActive,          // Active immediately
+		HiredDate:        sql.NullTime{Time: time.Now(), Valid: true}, // Current date/time
+		CreatedAt:        time.Now(),
+		UpdatedAt:        time.Now(),
 	}
 
 	query := `
@@ -429,14 +433,14 @@ func (r *LoungeStaffRepository) AddStaffToLoungeDirectByOwner(
 
 // GetStaffByLoungeIDAndUserID retrieves a staff member by lounge ID and user ID
 func (r *LoungeStaffRepository) GetStaffByLoungeIDAndUserID(ctx context.Context, loungeID, userID uuid.UUID) (*models.LoungeStaff, error) {
-    var staff models.LoungeStaff
-    query := `SELECT * FROM lounge_staff WHERE lounge_id = $1 AND user_id = $2`
-    err := r.db.GetContext(ctx, &staff, query, loungeID, userID)
-    if err == sql.ErrNoRows {
-        return nil, nil
-    }
-    if err != nil {
-        return nil, err
-    }
-    return &staff, nil
+	var staff models.LoungeStaff
+	query := `SELECT * FROM lounge_staff WHERE lounge_id = $1 AND user_id = $2`
+	err := r.db.GetContext(ctx, &staff, query, loungeID, userID)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &staff, nil
 }
