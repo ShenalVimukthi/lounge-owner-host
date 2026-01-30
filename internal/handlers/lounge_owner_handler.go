@@ -45,7 +45,7 @@ type SaveBusinessAndManagerInfoRequest struct {
 	ManagerFullName    string  `json:"manager_full_name" binding:"required"`
 	ManagerNICNumber   string  `json:"manager_nic_number" binding:"required"`
 	ManagerEmail       *string `json:"manager_email"`
-	District           string  `json:"district" binding:"required"`
+	District           string `json:"district" binding:"required"`
 	ManagerNICFrontURL *string `json:"manager_nic_front_url"` // Optional: NIC front image URL from Supabase
 	ManagerNICBackURL  *string `json:"manager_nic_back_url"`  // Optional: NIC back image URL from Supabase
 }
@@ -95,6 +95,7 @@ func (h *LoungeOwnerHandler) SaveBusinessAndManagerInfo(c *gin.Context) {
 	if req.BusinessLicense != nil {
 		businessLicenseVal = *req.BusinessLicense
 	}
+
 
 	err = h.loungeOwnerRepo.UpdateBusinessAndManagerInfoWithNIC(
 		userCtx.UserID,

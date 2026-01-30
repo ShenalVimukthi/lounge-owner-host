@@ -436,9 +436,10 @@ func (r *LoungeOwnerRepository) GetApprovedLoungeOwnersByDistrict()(map[string][
 	// Group owners by district
 	districtGroups := make(map[string][]models.LoungeOwner)
 	for _, owner := range owners {
-		district := owner.District
-		if district == "" {
-			district = "Other" // Default for owners without district
+		// Extract district string from sql.NullString
+		district := "Other" // Default for owners without district
+		if owner.District.Valid && owner.District.String != "" {
+			district = owner.District.String
 		}
 		districtGroups[district] = append(districtGroups[district], owner)
 	}
