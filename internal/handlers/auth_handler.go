@@ -1057,6 +1057,7 @@ func (h *AuthHandler) VerifyOTPLoungeStaff(c *gin.Context, loungeStaffRepo *data
 		if !hasRole {
 			if err := h.userRepository.AddRole(user.ID, "lounge_staff"); err != nil {
 				log.Printf("ERROR: Failed to add lounge_staff role: %v", err)
+				return //added return 
 			} else {
 				user.Roles = append(user.Roles, "lounge_staff")
 			}
@@ -1080,7 +1081,7 @@ func (h *AuthHandler) VerifyOTPLoungeStaff(c *gin.Context, loungeStaffRepo *data
 	StaffRecord, err := loungeStaffRepo.AddStaffToLoungeWithCompleteData(
 		loungeUUID,
 		user.ID,
-		"pending",
+		"active",//changed to active to check db
 		req.FullName,
 		req.NicNumber,
 		req.Email,
