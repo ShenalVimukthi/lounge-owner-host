@@ -405,11 +405,22 @@ func (r *LoungeOwnerRepository) GetStaffCount(ownerID uuid.UUID) (int, error) {
 func (r *LoungeOwnerRepository) GetApprovedLoungeOwners()([]models.LoungeOwner,error){
 	var owners []models.LoungeOwner
 
+	// query := `
+	// 	SELECT * FROM lounge_owners
+	// 	WHERE verification_status = 'approved'
+	// 	ORDER BY business_name ASC
+	// 	`
+
 	query := `
-		SELECT * FROM lounge_owners
+		SELECT id, user_id, business_name, business_license,
+		       manager_full_name, manager_nic_number, manager_email, email, district,
+		       registration_step, profile_completed, verification_status,
+		       verification_notes, verified_at, verified_by, created_at, updated_at
+		FROM lounge_owners
 		WHERE verification_status = 'approved'
 		ORDER BY business_name ASC
 		`
+
 	err := r.db.Select(&owners, query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get approved lounge owners: %w", err)
@@ -424,11 +435,22 @@ func (r *LoungeOwnerRepository) GetApprovedLoungeOwnersByDistrict()(map[string][
 
 	var owners []models.LoungeOwner
 
+	// query :=`
+	// 		SELECT * FROM lounge_owners
+	// 		WHERE verification_status = 'approved'
+	// 		ORDER BY district ASC, business_name ASC
+	// 		`
+
 	query :=`
-			SELECT * FROM lounge_owners
-			WHERE verification_status = 'approved'
-			ORDER BY district ASC, business_name ASC
-			`
+		SELECT id, user_id, business_name, business_license,
+		       manager_full_name, manager_nic_number, manager_email, email, district,
+		       registration_step, profile_completed, verification_status,
+		       verification_notes, verified_at, verified_by, created_at, updated_at
+		FROM lounge_owners
+		WHERE verification_status = 'approved'
+		ORDER BY district ASC, business_name ASC
+		`
+
 	err := r.db.Select(&owners, query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get approved lounge owners: %w", err)

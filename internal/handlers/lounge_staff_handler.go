@@ -716,7 +716,7 @@ func (h *LoungeStaffHandler) ApproveStaff(c *gin.Context) {
 	}
 
 	// Extract route parameters
-	loungeIDStr := c.Param("lounge_id")
+	loungeIDStr := c.Param("id")
 	staffIDStr := c.Param("staff_id")
 
 	loungeID, err := uuid.Parse(loungeIDStr)
@@ -877,33 +877,43 @@ func (h *LoungeStaffHandler) GetStaffByLoungeWithApprovalFilter(c *gin.Context) 
 		return
 	}
 
-	// Get the lounge to verify ownership
-	lounge, err := h.loungeRepo.GetLoungeByID(loungeID)
-	if err != nil {
-		log.Printf("ERROR: Failed to get lounge %s: %v", loungeID, err)
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
-			Error:   "database_error",
-			Message: "Failed to retrieve lounge",
-		})
-		return
-	}
+	// Get the lounge owner record for this user
+    owner, err := h.loungeOwnerRepo.GetLoungeOwnerByUserID(userCtx.UserID)
+    if err != nil || owner == nil {
+        c.JSON(http.StatusUnauthorized, ErrorResponse{
+            Error:   "unauthorized",
+            Message: "Only lounge owners can view staff",
+        })
+        return
+    }
 
-	if lounge == nil {
-		c.JSON(http.StatusNotFound, ErrorResponse{
-			Error:   "not_found",
-			Message: "Lounge not found",
-		})
-		return
-	}
+	// Get the lounge
+    lounge, err := h.loungeRepo.GetLoungeByID(loungeID)
+    if err != nil {
+        log.Printf("ERROR: Failed to get lounge %s: %v", loungeID, err)
+        c.JSON(http.StatusInternalServerError, ErrorResponse{
+            Error:   "database_error",
+            Message: "Failed to retrieve lounge",
+        })
+        return
+    }
 
-	// Verify the user is the lounge owner
-	if lounge.LoungeOwnerID != userCtx.UserID {
-		c.JSON(http.StatusForbidden, ErrorResponse{
-			Error:   "forbidden",
-			Message: "You do not have permission to view staff for this lounge",
-		})
-		return
-	}
+    if lounge == nil {
+        c.JSON(http.StatusNotFound, ErrorResponse{
+            Error:   "not_found",
+            Message: "Lounge not found",
+        })
+        return
+    }
+
+	// ✅ FIX: Compare lounge owner IDs (not user IDs)
+    if lounge.LoungeOwnerID != owner.ID {
+        c.JSON(http.StatusForbidden, ErrorResponse{
+            Error:   "forbidden",
+            Message: "You do not have permission to view staff for this lounge",
+        })
+        return
+    }
 
 	// Get optional approval status filter from query params
 	approvalStatusParam := c.Query("approval_status")
@@ -966,3 +976,17 @@ func (h *LoungeStaffHandler) GetStaffByLoungeWithApprovalFilter(c *gin.Context) 
 	})
 
 }
+
+// func getStringFromNullString(ns sql.NullString) *string {
+//     if ns.Valid {
+//         return &ns.String
+//     }
+//     return nil
+// }
+
+// func getPointerFromNullTime(nt sql.NullTime) *time.Time {
+//     if nt.Valid {
+//         return &nt.Time
+//     }
+//     return nil
+// }

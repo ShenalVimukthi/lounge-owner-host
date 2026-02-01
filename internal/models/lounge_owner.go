@@ -11,6 +11,7 @@ import (
 type LoungeOwner struct {
 	ID     uuid.UUID `db:"id" json:"id"`
 	UserID uuid.UUID `db:"user_id" json:"user_id"`
+	Email  sql.NullString `db:"email" json:"email,omitempty"` //added newly (to send data to frontend without errors)
 
 	// Business Information
 	BusinessName    sql.NullString `db:"business_name" json:"business_name,omitempty"`       // Business/Hotel name
