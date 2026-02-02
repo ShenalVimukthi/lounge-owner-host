@@ -478,7 +478,7 @@ func (h *LoungeStaffHandler) UpdateStaffStatus(c *gin.Context) {
 		return
 	}
 
-	loungeIDStr := c.Param("lounge_id")
+	loungeIDStr := c.Param("id")
 	loungeID, err := uuid.Parse(loungeIDStr)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
@@ -567,7 +567,7 @@ func (h *LoungeStaffHandler) RemoveStaff(c *gin.Context) {
 		return
 	}
 
-	loungeIDStr := c.Param("lounge_id")
+	loungeIDStr := c.Param("id")
 	loungeID, err := uuid.Parse(loungeIDStr)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
@@ -747,6 +747,16 @@ func (h *LoungeStaffHandler) ApproveStaff(c *gin.Context) {
 		return
 	}
 
+	// Get the lounge owner record for this user
+	owner, err := h.loungeOwnerRepo.GetLoungeOwnerByUserID(userCtx.UserID)
+	if err != nil || owner == nil {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{
+			Error:   "unauthorized",
+			Message: "Only lounge owners can view staff",
+		})
+		return
+	}
+
 	// Get the lounge to verify ownership
 	lounge, err := h.loungeRepo.GetLoungeByID(loungeID)
 	if err != nil {
@@ -766,14 +776,14 @@ func (h *LoungeStaffHandler) ApproveStaff(c *gin.Context) {
 		return
 	}
 
-	// Verify the user is the lounge owner
-	if lounge.LoungeOwnerID != userCtx.UserID {
-		c.JSON(http.StatusForbidden, ErrorResponse{
-			Error:   "forbidden",
-			Message: "You do not have permission to approve staff for this lounge",
-		})
-		return
-	}
+	// Compare lounge owner IDs 
+    if lounge.LoungeOwnerID != owner.ID {
+        c.JSON(http.StatusForbidden, ErrorResponse{
+            Error:   "forbidden",
+            Message: "You do not have permission to view staff for this lounge",
+        })
+        return
+    }
 
 	// Get the staff member to verify they belong to this lounge
 	staff, err := h.staffRepo.GetStaffByIDWithDetails(staffID)
@@ -810,7 +820,7 @@ func (h *LoungeStaffHandler) ApproveStaff(c *gin.Context) {
 		activeStatus := "active"
 		employmentStatus = &activeStatus
 	case "declined":
-		inactiveStatus := "inactive"
+		inactiveStatus := "terminated"
 		employmentStatus = &inactiveStatus
 	}
 
@@ -906,7 +916,7 @@ func (h *LoungeStaffHandler) GetStaffByLoungeWithApprovalFilter(c *gin.Context) 
         return
     }
 
-	// ✅ FIX: Compare lounge owner IDs (not user IDs)
+	// Compare lounge owner IDs 
     if lounge.LoungeOwnerID != owner.ID {
         c.JSON(http.StatusForbidden, ErrorResponse{
             Error:   "forbidden",

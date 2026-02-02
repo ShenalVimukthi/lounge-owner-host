@@ -38,14 +38,16 @@ func (r *LoungeTransportLocationRepository) AddTransportLocationToLounge(Transpo
 
 	// setting up the query to run
 	query := `INSERT INTO lounge_transport_locations (
-			 id, lounge_id, location, status, created_at, updated_at)
-			 VALUES($1, $2, $3, $4, $5, $6)
+			 id, lounge_id, location, latitude, longitude, status, created_at, updated_at)
+			 VALUES($1, $2, $3, $4, $5, $6, $7, $8)
 			 RETURNING id, created_at, updated_at`
 	
     err := r.db.QueryRowx(query,
 		TransportLocation.ID,
 		TransportLocation.LoungeID,
 		TransportLocation.Location,
+		TransportLocation.Latitude,
+		TransportLocation.Longitude,
 		TransportLocation.Status,
 		TransportLocation.CreatedAt,
 		TransportLocation.UpdatedAt,
