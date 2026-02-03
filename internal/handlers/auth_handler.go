@@ -1064,15 +1064,26 @@ func (h *AuthHandler) VerifyOTPLoungeStaff(c *gin.Context, loungeStaffRepo *data
 		}
 
 		// update the user profile data
+		
 
 	} else {
+
 		// NEW USER - Create with basic data only (phone + role)
-		user, err = h.userRepository.CreateUserWithRole(phone, "lounge_staff")
+		// user, err = h.userRepository.CreateUserWithRole(phone, "lounge_staff")
+		// if err != nil {
+		// 	log.Printf("ERROR: Failed to create lounge staff user for phone %s: %v", phone, err)
+		// 	c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "user_creation_failed", Message: "Failed to create user account"})
+		// 	return
+		// }
+
+		// USER CREATION WITH MORE DETAILS
+		user, err = h.userRepository.CreateUserWithFullData(phone,"lounge_staff",req.FullName,req.NicNumber,req.Email)
 		if err != nil {
 			log.Printf("ERROR: Failed to create lounge staff user for phone %s: %v", phone, err)
 			c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "user_creation_failed", Message: "Failed to create user account"})
 			return
 		}
+
 		isNew = true
 	}
 

@@ -317,12 +317,23 @@ func (h *LoungeStaffHandler) AddStaffToLoungeDirectByOwner(c *gin.Context) {
 
 	} else {
 		// NEW USER - Create with basic data only (phone + role)
-		user, err = h.userRepo.CreateUserWithRole(phone, "lounge_staff")
+		// user, err = h.userRepo.CreateUserWithRole(phone, "lounge_staff")
+		// if err != nil {
+		// 	log.Printf("ERROR: Failed to create lounge staff user for phone %s: %v", phone, err)
+		// 	c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "user_creation_failed", Message: "Failed to create user account"})
+		// 	return
+		// }
+
+		email:=""//email is set to null and sending 
+
+		// USER CREATION WITH MORE DETAILS
+		user, err = h.userRepo.CreateUserWithFullData(phone,"lounge_staff",req.FullName,req.NICNumber,email)
 		if err != nil {
 			log.Printf("ERROR: Failed to create lounge staff user for phone %s: %v", phone, err)
 			c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "user_creation_failed", Message: "Failed to create user account"})
 			return
 		}
+
 		isNew = true
 	}
 

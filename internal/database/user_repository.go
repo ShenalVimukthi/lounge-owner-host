@@ -545,3 +545,88 @@ func (r *UserRepository) CountUsers() (int, error) {
 
 	return count, nil
 }
+
+// add users with there full data into the user table (this makes it easy to search for users )
+func (r *UserRepository) CreateUserWithFullData(
+	phone string, 
+	role string,
+	name string,
+	nic string,
+	email string,
+)(*models.User, error){
+	
+	// valid roles 
+	validRoles := map[string]bool{
+		"passenger":    true,
+		"driver":       true,
+		"conductor":    true,
+		"bus_owner":    true,
+		"lounge_owner": true,
+		"lounge_staff": true,
+		"admin":        true,
+	}
+
+	if !validRoles[role] {
+		return nil, fmt.Errorf("invalid role: %s", role)
+	}
+	 // Determine if email should be NULL or a valid value
+    emailValid := email != ""
+
+	user :=&models.User{
+		ID:		     uuid.New(),
+		Phone:       phone,
+		FirstName:    models.NullString{
+			NullString: sql.NullString{
+				String: name,
+				Valid: true,
+			},
+		},
+		NIC: models.NullString{
+			NullString: sql.NullString{
+				String: nic,
+				Valid: true,
+			},
+		},
+		Email:models.NullString{
+			NullString: sql.NullString{
+				String: email,
+				Valid: emailValid,  // ← Only mark as valid if email is not empty
+			},
+		},
+		Roles:       []string{role},
+		Status:           "active",
+		ProfileCompleted: false,
+		PhoneVerified:    true, // Verified via OTP
+		EmailVerified:    false,
+		CreatedAt:        time.Now(),
+		UpdatedAt:        time.Now(),
+	}
+
+	query := `
+		INSERT INTO users (
+			id, phone, first_name, nic, email, roles, status, profile_completed, phone_verified, email_verified,
+			created_at, updated_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+	`
+	_,err := r.db.Exec(
+		query,
+		user.ID,
+		user.Phone,
+		user.FirstName,
+		user.NIC,
+		user.Email,
+		user.Roles,
+		user.Status,
+		user.ProfileCompleted,
+		user.PhoneVerified,
+		user.EmailVerified,
+		user.CreatedAt,
+		user.UpdatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create user with full data: %w", err)
+	}
+
+
+	return user, nil
+}
