@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"time"
@@ -175,18 +176,50 @@ func (h *AuthHandler) SendOTP(c *gin.Context) {
 	expiresAt, _ := h.otpService.GetOTPExpiry(phone)
 	expiresIn := int(time.Until(expiresAt).Seconds())
 
+	// Check SMS configuration before attempting to send
+	if h.config.SMS.Mode == "production" {
+		// Validate SMS configuration
+		if h.config.SMS.Method == "url" && h.config.SMS.ESMSQK == "" {
+			log.Printf("❌ ERROR: SMS API key (DIALOG_SMS_ESMSQK) is not configured")
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error":   "sms_not_configured",
+				"message": "SMS gateway is not properly configured. Please contact support.",
+				"details": "Dialog API key not set",
+			})
+			return
+		}
+
+		if h.config.SMS.Mask == "" {
+			log.Printf("❌ ERROR: SMS Mask (DIALOG_SMS_MASK) is not configured")
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error":   "sms_not_configured",
+				"message": "SMS gateway is not properly configured. Please contact support.",
+				"details": "SMS Mask not set",
+			})
+			return
+		}
+	}
+
 	// Send SMS based on mode
 	if h.config.SMS.Mode == "production" {
 		// Production mode: Send actual SMS via Dialog gateway
 		log.Printf("🔵 Attempting to send SMS to %s via Dialog gateway (App: %s)...", phone, req.AppType)
+		log.Printf("📝 SMS Method: %s", h.config.SMS.Method)
+		if h.config.SMS.Method == "url" {
+			log.Printf("📝 Using API Key: %s****", h.config.SMS.ESMSQK[:3])
+		}
+		log.Printf("📝 SMS Mask: %s", h.config.SMS.Mask)
+
 		transactionID, err := h.smsGateway.SendOTP(phone, otp, req.AppType)
 		if err != nil {
 			log.Printf("❌ ERROR: Failed to send SMS to %s: %v", phone, err)
 			log.Printf("❌ Error type: %T", err)
 			log.Printf("❌ Full error details: %+v", err)
-			c.JSON(http.StatusInternalServerError, ErrorResponse{
-				Error:   "sms_send_failed",
-				Message: "Failed to send OTP via SMS. Please try again.",
+			errorMsg := fmt.Sprintf("Failed to send OTP: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error":   "sms_send_failed",
+				"message": "Failed to send OTP via SMS. Please try again.",
+				"details": errorMsg,
 			})
 			return
 		}
@@ -194,11 +227,12 @@ func (h *AuthHandler) SendOTP(c *gin.Context) {
 		log.Printf("✅ SMS sent successfully to %s, transaction_id: %d", phone, transactionID)
 
 		// Production response (without OTP)
-		c.JSON(http.StatusOK, SendOTPResponse{
-			Message:   "OTP sent successfully to your phone",
-			Phone:     phone,
-			ExpiresAt: expiresAt,
-			ExpiresIn: expiresIn,
+		c.JSON(http.StatusOK, gin.H{
+			"message":    "OTP sent successfully to your phone",
+			"phone":      phone,
+			"expires_at": expiresAt,
+			"expires_in": expiresIn,
+			"mode":       "production",
 		})
 		return
 	}
