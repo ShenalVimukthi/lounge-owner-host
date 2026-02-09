@@ -590,7 +590,7 @@ func (r *UserRepository) CreateUserWithFullData(
 		Email:models.NullString{
 			NullString: sql.NullString{
 				String: email,
-				Valid: emailValid,  // ← Only mark as valid if email is not empty
+				Valid: emailValid,  // Only mark as valid if email is not empty
 			},
 		},
 		Roles:       []string{role},

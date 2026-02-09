@@ -146,6 +146,8 @@ type UserSession struct {
 	NotificationPermission bool       `json:"notification_permission" db:"notification_permission"`
 	LastActivityAt         time.Time  `json:"last_activity_at" db:"last_activity_at"`
 	IsActive               bool       `json:"is_active" db:"is_active"`
+	// New addition OneSignal PlayerID
+	OneSignalPlayerID      NullString `json:"one_signal_player_id" db:"one_signal_player_id"`
 	CreatedAt              time.Time  `json:"created_at" db:"created_at"`
 	UpdatedAt              time.Time  `json:"updated_at" db:"updated_at"`
 }

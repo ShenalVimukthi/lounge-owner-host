@@ -30,6 +30,8 @@ type LoungeStaffHandler struct {
 	phoneValidator *validator.PhoneValidator
 	// adding loungeStaff repository
 	loungeStaffRepo *database.LoungeStaffRepository
+	// adding booking repository
+	bookingRepo *database.BookingRepository
 }
 
 // NewLoungeStaffHandler creates a new lounge staff handler
@@ -40,6 +42,7 @@ func NewLoungeStaffHandler(
 	userRepo *database.UserRepository,
 	phoneValidator *validator.PhoneValidator,
 	loungeStaffRepo *database.LoungeStaffRepository,
+	bookingRepo *database.BookingRepository,
 ) *LoungeStaffHandler {
 	return &LoungeStaffHandler{
 		staffRepo:       staffRepo,
@@ -48,6 +51,7 @@ func NewLoungeStaffHandler(
 		userRepo:        userRepo,
 		phoneValidator:  phoneValidator,
 		loungeStaffRepo: loungeStaffRepo,
+		bookingRepo: bookingRepo,
 	}
 }
 
@@ -996,6 +1000,102 @@ func (h *LoungeStaffHandler) GetStaffByLoungeWithApprovalFilter(c *gin.Context) 
 		"filter": approvalStatusFilter,
 	})
 
+}
+
+// GetBookingByReference handles GET /api/v1/lounge-staff/bookings/reference/:reference
+// Allows approved lounge staff to lookup booking details by booking reference
+func (h *LoungeStaffHandler) GetBookingByReference(c *gin.Context){
+
+	// Get user context from JWT middleware
+	userCtx, exists := middleware.GetUserContext(c)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{
+			Error: "unauthorized",
+			Message: "User context not found",
+		})
+		return
+	}
+
+	// Get booking reference from URL parameter
+	bookingReference := c.Param("reference")
+	if bookingReference == "" {
+		c.JSON(http.StatusBadRequest,ErrorResponse{
+			Error: "invalid_request",
+			Message: "Booking reference is required",
+		})
+		return
+	}
+
+	// Verify user is approved and active lounge staff
+	staff, err := h.loungeStaffRepo.GetApprovedStaffaByUserID(userCtx.UserID)
+	if err != nil {
+		log.Printf("ERROR: Failed to verify lounge staff for user %s: %v", userCtx.UserID, err)
+		c.JSON(http.StatusInternalServerError,ErrorResponse{
+			Error: "database_error",
+			Message: "Failed to verify staff credentials",
+		})
+		return
+	}
+
+	if staff == nil {
+		c.JSON(http.StatusForbidden,ErrorResponse{
+			Error: "forbidden",
+			Message: "Access denied. You must be an approved and active lounge staff member to access bookings." ,
+		})
+		return
+	}
+
+	// Get lounge details for logging/auditing
+	lounge, err := h.loungeRepo.GetLoungeByID(staff.LoungeID)
+	if err != nil {
+		log.Printf("WARNING: Could not fetch lounge details for staff %s: %v", staff.ID, err)
+		// Continue anyway - lounge info is just for logging
+	}
+
+	// Fetch booking by reference (using existing BookingRepository)
+	// Note: You'll need to inject BookingRepository into LoungeStaffHandler
+	booking, err := h.bookingRepo.GetByReference(bookingReference)
+	if err != nil {
+		log.Printf("ERROR: Failed to fetch booking %s: %v", bookingReference, err)
+		c.JSON(http.StatusInternalServerError,ErrorResponse{
+			Error: "database_error",
+			Message: "Failed to retrieve booking",
+		})
+		return
+	}
+
+	if booking == nil {
+		c.JSON(http.StatusNotFound, ErrorResponse{
+			Error: "not_found",
+			Message: "Booking not found",
+		})
+		return
+	}
+
+	// Log the access for auditing
+	log.Printf("INFO: Lounge staff %s (Lounge: %s, Staff: %s) accessed booking %s",
+		userCtx.UserID,
+		staff.LoungeID,
+		staff.FullName.String,
+		bookingReference,
+	)
+
+	// Return booking data
+	c.JSON(http.StatusOK, gin.H{
+		"booking": booking,
+		"accessed_by": gin.H{
+			"staff_id":    staff.ID,
+			"staff_name":  staff.FullName.String,
+			"lounge_id":   staff.LoungeID,
+			"lounge_name": func() string {
+				if lounge != nil {
+					return lounge.LoungeName
+				}
+				return ""
+			}(),
+		},
+		"accessed_at": time.Now(),
+	})
 }
 
 // func getStringFromNullString(ns sql.NullString) *string {

@@ -444,3 +444,31 @@ func (r *LoungeStaffRepository) GetStaffByLoungeIDAndUserID(ctx context.Context,
 	}
 	return &staff, nil
 }
+
+// GetApprovedStaffByUserID retrieves an approved and active lounge staff by user ID
+// Returns error if staff is not approved or not active
+func (r *LoungeStaffRepository) GetApprovedStaffaByUserID(userID uuid.UUID)(*models.LoungeStaff,error){
+
+	query := `
+		SELECT
+			id, lounge_id, user_id, full_name, nic_number, email,
+			profile_completed, approval_status, employment_status,
+			hired_date, terminated_date, notes, created_at, updated_at
+		FROM lounge_staff
+		WHERE user_id = $1
+			AND approval_status = 'approved'
+			AND employment_status = 'active'
+			AND profile_completed = true
+		LIMIT 1
+	`
+	var staff models.LoungeStaff
+	err := r.db.QueryRowx(query, userID).StructScan(&staff)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get approved staff: %w", err)
+	}
+
+	return &staff, nil
+}

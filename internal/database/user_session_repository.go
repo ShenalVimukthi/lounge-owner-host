@@ -367,3 +367,77 @@ func nullString(s string) sql.NullString {
 	}
 	return sql.NullString{String: s, Valid: true}
 }
+
+// GetActiveSessionsByUserID retrieves all active sessions for a user
+func (r *UserSessionRepository) GetActiveSessionsByUserID(userID uuid.UUID) ([]*models.UserSession, error) {
+	query := `
+		SELECT id, user_id, device_id, device_type, device_model, app_version, os_version,
+			onesignal_player_id, ip_address, location_permission, notification_permission,
+			last_activity_at, is_active, created_at, updated_at
+		FROM user_sessions
+		WHERE user_id = $1 AND is_active = true
+		ORDER BY last_activity_at DESC
+	`
+
+	rows, err := r.db.Query(query, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get active sessions: %w", err)
+	}
+	defer rows.Close()
+
+	var sessions []*models.UserSession
+	for rows.Next() {
+		session := &models.UserSession{}
+		err := rows.Scan(
+			&session.ID,
+			&session.UserID,
+			&session.DeviceID,
+			&session.DeviceType,
+			&session.DeviceModel,
+			&session.AppVersion,
+			&session.OSVersion,
+			&session.OneSignalPlayerID,  // Changed from FCMToken
+			&session.IPAddress,
+			&session.LocationPermission,
+			&session.NotificationPermission,
+			&session.LastActivityAt,
+			&session.IsActive,
+			&session.CreatedAt,
+			&session.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan session: %w", err)
+		}
+		sessions = append(sessions, session)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating sessions: %w", err)
+	}
+
+	return sessions, nil
+}
+
+// UpdateOneSignalPlayerID updates the OneSignal player ID for a session
+func (r *UserSessionRepository) UpdateOneSignalPlayerID(userID uuid.UUID, deviceID, playerID string) error {
+	query := `
+		UPDATE user_sessions
+		SET onesignal_player_id = $1,
+		    updated_at = $2
+		WHERE user_id = $3 AND device_id = $4
+	`
+
+	_, err := r.db.Exec(
+		query,
+		playerID,
+		time.Now(),
+		userID,
+		deviceID,
+	)
+
+	if err != nil {
+		return fmt.Errorf("failed to update OneSignal player ID: %w", err)
+	}
+
+	return nil
+}

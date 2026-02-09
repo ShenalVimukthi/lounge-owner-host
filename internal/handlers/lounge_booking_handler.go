@@ -19,6 +19,7 @@ type LoungeBookingHandler struct {
 	bookingRepo     *database.LoungeBookingRepository
 	loungeRepo      *database.LoungeRepository
 	loungeOwnerRepo *database.LoungeOwnerRepository
+	loungeStaffRepo *database.LoungeStaffRepository
 }
 
 // NewLoungeBookingHandler creates a new lounge booking handler
@@ -26,11 +27,14 @@ func NewLoungeBookingHandler(
 	bookingRepo *database.LoungeBookingRepository,
 	loungeRepo *database.LoungeRepository,
 	loungeOwnerRepo *database.LoungeOwnerRepository,
+	loungeStaffRepo *database.LoungeStaffRepository,
+
 ) *LoungeBookingHandler {
 	return &LoungeBookingHandler{
 		bookingRepo:     bookingRepo,
 		loungeRepo:      loungeRepo,
 		loungeOwnerRepo: loungeOwnerRepo,
+		loungeStaffRepo: loungeStaffRepo,
 	}
 }
 
@@ -1035,11 +1039,37 @@ func (h *LoungeBookingHandler) GetLoungeBookingByReference(c *gin.Context) {
 		return
 	}
 
+	// // Check ownership (COMMENTED FOR NEW ADDITIONS)
+	// if booking.UserID != userCtx.UserID {
+	// 	owner, _ := h.loungeOwnerRepo.GetLoungeOwnerByUserID(userCtx.UserID)
+	// 	lounge, _ := h.loungeRepo.GetLoungeByID(booking.LoungeID)
+	// 	if owner == nil || lounge == nil || lounge.LoungeOwnerID != owner.ID {
+	// 		c.JSON(http.StatusForbidden, ErrorResponse{
+	// 			Error:   "forbidden",
+	// 			Message: "Not authorized to view this booking",
+	// 		})
+	// 		return
+	// 	}
+	// }
+
 	// Check ownership
 	if booking.UserID != userCtx.UserID {
+		// Check if user is lounge owner
 		owner, _ := h.loungeOwnerRepo.GetLoungeOwnerByUserID(userCtx.UserID)
 		lounge, _ := h.loungeRepo.GetLoungeByID(booking.LoungeID)
-		if owner == nil || lounge == nil || lounge.LoungeOwnerID != owner.ID {
+
+		isOwner := owner != nil && lounge != nil && lounge.LoungeOwnerID == owner.ID
+
+		// ✅ ADD THIS: Check if user is approved & active staff
+		var isStaff bool
+		if !isOwner {
+			staff, _ := h.loungeStaffRepo.GetApprovedStaffaByUserID(userCtx.UserID)
+			if staff != nil && staff.LoungeID == booking.LoungeID {
+				isStaff = true
+			}
+		}
+
+		if !isOwner && !isStaff {
 			c.JSON(http.StatusForbidden, ErrorResponse{
 				Error:   "forbidden",
 				Message: "Not authorized to view this booking",
@@ -1047,7 +1077,6 @@ func (h *LoungeBookingHandler) GetLoungeBookingByReference(c *gin.Context) {
 			return
 		}
 	}
-
 	c.JSON(http.StatusOK, booking)
 }
 

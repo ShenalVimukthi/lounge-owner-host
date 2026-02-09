@@ -487,13 +487,13 @@ func (r *LoungeBookingRepository) CreateLoungeBooking(
 	booking.PreOrders = preOrders
 	return booking, nil
 }
-
+// changed lb.id to lounge_booking_id
 // GetLoungeBookingByID returns a booking by ID with guests and pre-orders
 func (r *LoungeBookingRepository) GetLoungeBookingByID(bookingID uuid.UUID) (*models.LoungeBooking, error) {
 	var booking models.LoungeBooking
 	query := `
 		SELECT 
-			lb.id, lb.booking_reference, lb.user_id, lb.lounge_id, lb.master_booking_id, lb.bus_booking_id,
+			lb.lounge_booking_id, lb.booking_reference, lb.user_id, lb.lounge_id, lb.master_booking_id, lb.bus_booking_id,
 			lb.booking_type, lb.scheduled_arrival, lb.scheduled_departure, lb.actual_arrival, lb.actual_departure,
 			lb.number_of_guests, lb.pricing_type, lb.base_price, lb.pre_order_total,
 			lb.discount_amount, lb.total_amount, lb.status, lb.payment_status,
@@ -503,7 +503,7 @@ func (r *LoungeBookingRepository) GetLoungeBookingByID(bookingID uuid.UUID) (*mo
 			l.lounge_name, l.address
 		FROM lounge_bookings lb
 		JOIN lounges l ON lb.lounge_id = l.id
-		WHERE lb.id = $1
+		WHERE lb.lounge_booking_id = $1
 	`
 
 	row := r.db.QueryRow(query, bookingID)
@@ -559,7 +559,7 @@ func (r *LoungeBookingRepository) GetLoungeBookingByID(bookingID uuid.UUID) (*mo
 // GetLoungeBookingByReference returns a booking by reference
 func (r *LoungeBookingRepository) GetLoungeBookingByReference(reference string) (*models.LoungeBooking, error) {
 	var bookingID uuid.UUID
-	query := `SELECT id FROM lounge_bookings WHERE booking_reference = $1`
+	query := `SELECT lounge_booking_id FROM lounge_bookings WHERE booking_reference = $1`
 	err := r.db.Get(&bookingID, query, reference)
 	if err == sql.ErrNoRows {
 		return nil, nil

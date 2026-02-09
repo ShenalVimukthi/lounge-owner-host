@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -90,12 +91,12 @@ type SendSMSResponse struct {
 	Status  string `json:"status"`
 	Comment string `json:"comment"`
 	Data    struct {
-		CampaignID         int     `json:"campaignId"`
-		CampaignCost       float64 `json:"campaignCost"`
-		WalletBalance      float64 `json:"walletBalance"`
-		DuplicatesRemoved  int     `json:"duplicatesRemoved"`
-		InvalidNumbers     int     `json:"invalidNumbers"`
-		MaskBlockedNumbers int     `json:"mask_blocked_numbers"`
+		CampaignID         int           `json:"campaignId"`
+		CampaignCost       float64       `json:"campaignCost"`
+		WalletBalance      FlexibleFloat `json:"walletBalance"`
+		DuplicatesRemoved  int           `json:"duplicatesRemoved"`
+		InvalidNumbers     int           `json:"invalidNumbers"`
+		MaskBlockedNumbers int           `json:"mask_blocked_numbers"`
 	} `json:"data"`
 	ErrCode string `json:"errCode"`
 }
@@ -475,4 +476,39 @@ func (d *DialogGateway) SendBulkSMS(phones []string, message string) (int64, err
 // GetName returns the name of this SMS gateway
 func (d *DialogGateway) GetName() string {
 	return "Dialog API v2 Gateway"
+}
+
+// FlexibleFloat handles numbers that may be returned as strings in JSON
+type FlexibleFloat float64
+
+// UnmarshalJSON accepts both numeric and quoted string values
+func (f *FlexibleFloat) UnmarshalJSON(b []byte) error {
+	if len(b) == 0 || string(b) == "null" {
+		return nil
+	}
+
+	// If quoted string
+	if b[0] == '"' {
+		var s string
+		if err := json.Unmarshal(b, &s); err != nil {
+			return err
+		}
+		if s == "" {
+			return nil
+		}
+		v, err := strconv.ParseFloat(s, 64)
+		if err != nil {
+			return err
+		}
+		*f = FlexibleFloat(v)
+		return nil
+	}
+
+	// Regular number
+	var n float64
+	if err := json.Unmarshal(b, &n); err != nil {
+		return err
+	}
+	*f = FlexibleFloat(n)
+	return nil
 }

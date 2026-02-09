@@ -25,6 +25,7 @@ type AuthHandler struct {
 	phoneValidator         *validator.PhoneValidator
 	rateLimitService       *services.RateLimitService
 	auditService           *services.AuditService
+	notificationService *services.NotificationService
 	userRepository         *database.UserRepository
 	passengerRepository    *database.PassengerRepository
 	refreshTokenRepository *database.RefreshTokenRepository
@@ -41,6 +42,7 @@ func NewAuthHandler(
 	phoneValidator *validator.PhoneValidator,
 	rateLimitService *services.RateLimitService,
 	auditService *services.AuditService,
+	notificationService *services.NotificationService,
 	userRepository *database.UserRepository,
 	passengerRepository *database.PassengerRepository,
 	refreshTokenRepository *database.RefreshTokenRepository,
@@ -55,6 +57,7 @@ func NewAuthHandler(
 		phoneValidator:         phoneValidator,
 		rateLimitService:       rateLimitService,
 		auditService:           auditService,
+		notificationService:    notificationService,
 		userRepository:         userRepository,
 		passengerRepository:    passengerRepository,
 		refreshTokenRepository: refreshTokenRepository,
@@ -1105,6 +1108,19 @@ func (h *AuthHandler) VerifyOTPLoungeStaff(c *gin.Context, loungeStaffRepo *data
         })
         return
 	}
+	// Send notification to lounge owner (non-blocking)
+	go func() {
+		err := h.notificationService.NotifyLoungeOwnerNewStaff(
+			loungeUUID,
+			req.FullName,
+			phone,
+			req.NicNumber,
+		)
+		if err != nil {
+			log.Printf("WARNING: Failed to send notification to lounge owner: %v", err)
+			// Don't fail the request - notification is non-critical
+		}
+	}()
 
 	// Determine registration step based on lounge_staff record status
 	var registrationStep string = "pending"

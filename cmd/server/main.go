@@ -18,6 +18,7 @@ import (
 	"github.com/smarttransit/sms-auth-backend/internal/middleware"
 	"github.com/smarttransit/sms-auth-backend/internal/services"
 	"github.com/smarttransit/sms-auth-backend/pkg/jwt"
+	"github.com/smarttransit/sms-auth-backend/pkg/onesignal"
 	"github.com/smarttransit/sms-auth-backend/pkg/sms"
 	"github.com/smarttransit/sms-auth-backend/pkg/validator"
 )
@@ -97,6 +98,9 @@ func main() {
 	ownerRepository := database.NewBusOwnerRepository(db)
 	permitRepository := database.NewRoutePermitRepository(db)
 	busRepository := database.NewBusRepository(db)
+
+	// Initialize booking repository
+	bookingRepository := database.NewBookingRepository(db)
 
 	// Initialize lounge owner repositories
 	// Type assertion needed: db is interface DB, but repositories need *sqlx.DB
@@ -189,6 +193,27 @@ func main() {
 
 	logger.Info("Services initialized")
 
+	// Initialize OneSignal service (for push notifications)
+	oneSignalService := onesignal.NewOneSignalService(
+		cfg.OneSignalAppID,
+		cfg.OneSignalRestAPIKey,
+	)
+	if cfg.OneSignalAppID == "" || cfg.OneSignalRestAPIKey == "" {
+		logger.Warn("⚠️ OneSignal credentials not configured - push notifications will not work")
+	}else{
+		logger.Info("OneSignal credentials configured ")
+	}
+
+	// Initialize notification service (with OneSignal service and required repositories)
+	notificationService := services.NewNotificationService(
+		oneSignalService,
+		userSessionRepository,
+		loungeRepository,
+		loungeOwnerRepository,
+	)
+
+	logger.Info("OneSignal push notification Services initialized")
+
 	// Initialize handlers
 	authHandler := handlers.NewAuthHandler(
 		jwtService,
@@ -196,6 +221,7 @@ func main() {
 		phoneValidator,
 		rateLimitService,
 		auditService,
+		notificationService, // ✅ Add notificationService
 		userRepository,
 		passengerRepository,
 		refreshTokenRepository,
@@ -236,18 +262,18 @@ func main() {
 
 	// Initialize lounge owner, lounge, staff, lounge driver, lounge transport location, lounge tranport location price and admin handlers
 	logger.Info("🔍 DEBUG: Initializing lounge handlers...")
-	loungeOwnerHandler := handlers.NewLoungeOwnerHandler(loungeOwnerRepository, userRepository,loungeRepository)//added lounge repository new
+	loungeOwnerHandler := handlers.NewLoungeOwnerHandler(loungeOwnerRepository, userRepository, loungeRepository) //added lounge repository new
 	loungeRouteRepository := database.NewLoungeRouteRepository(sqlxDB.DB)
 	loungeHandler := handlers.NewLoungeHandler(loungeRepository, loungeOwnerRepository, loungeRouteRepository)
-	loungeStaffHandler := handlers.NewLoungeStaffHandler(loungeStaffRepository, loungeRepository, loungeOwnerRepository,userRepository,phoneValidator,loungeStaffRepository)
+	loungeStaffHandler := handlers.NewLoungeStaffHandler(loungeStaffRepository, loungeRepository, loungeOwnerRepository, userRepository, phoneValidator, loungeStaffRepository, bookingRepository)
 	loungeDriverHandler := handlers.NewLoungeDriverHandler(loungeOwnerRepository, loungeRepository, loungeDriverRepository)
 	loungeTransportLocationHandler := handlers.NewLoungeTransportLocationHandler(loungeOwnerRepository, loungeRepository, loungeTransportLocationRepository)
-	loungeTransportLocationPriceHandler := handlers.NewLoungeTransportLocationPriceHandler(loungeOwnerRepository,loungeRepository,loungeTransportLocationRepository,loungeTransportLocationPriceRepository)
+	loungeTransportLocationPriceHandler := handlers.NewLoungeTransportLocationPriceHandler(loungeOwnerRepository, loungeRepository, loungeTransportLocationRepository, loungeTransportLocationPriceRepository)
 
 	// Initialize lounge booking system
 	logger.Info("🏨 Initializing lounge booking system...")
 	loungeBookingRepo := database.NewLoungeBookingRepository(sqlxDB.DB)
-	loungeBookingHandler := handlers.NewLoungeBookingHandler(loungeBookingRepo, loungeRepository, loungeOwnerRepository)
+	loungeBookingHandler := handlers.NewLoungeBookingHandler(loungeBookingRepo, loungeRepository, loungeOwnerRepository, loungeStaffRepository)
 	logger.Info("✓ Lounge booking system initialized")
 
 	logger.Info("🔍 DEBUG: Lounge handlers initialized successfully")
@@ -472,12 +498,12 @@ func main() {
 			})
 			// lounge_staff_specific routes
 			auth.POST("/verify-otp-lounge-staff", func(c *gin.Context) {
-   		        authHandler.VerifyOTPLoungeStaff(c, loungeStaffRepository)
+				authHandler.VerifyOTPLoungeStaff(c, loungeStaffRepository)
 			})
 			// Lounge owner-specific endpoint
 			auth.GET("/otp-status/:phone", authHandler.GetOTPStatus)
 			auth.POST("/refresh-token", authHandler.RefreshToken)
-			auth.POST("/refresh", authHandler.RefreshToken) // Alias for mobile compatibility	
+			auth.POST("/refresh", authHandler.RefreshToken) // Alias for mobile compatibility
 			// Protected routes (require JWT authentication)
 			protected := auth.Group("")
 			protected.Use(middleware.AuthMiddleware(jwtService))
@@ -605,12 +631,12 @@ func main() {
 		// Lounge Owner routes (all protected)
 		logger.Info("🏢 Registering Lounge Owner routes...")
 		loungeOwner := v1.Group("/lounge-owner")
-		{	
+		{
 			// public lounge owner endpoints (for staff registering and lounge selection parts )
 			loungeOwner.GET("/approved", loungeOwnerHandler.GetApprovedLoungeOwners)
 			loungeOwner.GET("/approved/grouped-by-district", loungeOwnerHandler.GetApprovedLoungeOwnersByDsitrict)
 			loungeOwner.GET("/:owner_id/lounges", loungeOwnerHandler.GetLoungesByOwnerID)
-			
+
 			// Protected routes (require JWT authentication)
 			loungeOwner.Use(middleware.AuthMiddleware(jwtService))
 			{
@@ -679,7 +705,7 @@ func main() {
 				// logger.Info("  ✅ GET /api/v1/lounges/:id/staff (read-only, no approval needed)")
 				// loungesProtected.GET("/:id/staff", loungeStaffHandler.GetStaffByLounge)//This endpont will most probabbly removed (i kept it for now to backward compatability)
 				logger.Info("  ✅ POST /api/v1/lounges/:id/staff/direct-add (owner can directly add staff) (requires approval)")
-				loungesProtected.POST(":id/staff/direct-add",middleware.RequireApprovedLoungeOwner(loungeOwnerRepository),loungeStaffHandler.AddStaffToLoungeDirectByOwner)
+				loungesProtected.POST(":id/staff/direct-add", middleware.RequireApprovedLoungeOwner(loungeOwnerRepository), loungeStaffHandler.AddStaffToLoungeDirectByOwner)
 				// Permission management moved to users.roles array - removed permission_type field
 				logger.Info("  ✅ PUT /api/v1/lounges/:id/staff/:staff_id/status (requires approval)")
 				loungesProtected.PUT("/:id/staff/:staff_id/status", middleware.RequireApprovedLoungeOwner(loungeOwnerRepository), loungeStaffHandler.UpdateStaffStatus)
@@ -708,15 +734,15 @@ func main() {
 
 				// transport location price management for specific lounge
 				logger.Info(" ✅ GET /api/v1/lounges/:id/transport-locations/:location_id/prices - get transport location prices in lounge (read-only, no approval needed)")
-				loungesProtected.GET("/:id/transport-locations/:location_id/prices",loungeTransportLocationPriceHandler.GetLoungeTransportLocationPrices)
+				loungesProtected.GET("/:id/transport-locations/:location_id/prices", loungeTransportLocationPriceHandler.GetLoungeTransportLocationPrices)
 				logger.Info(" ✅ POST /api/v1/lounges/:id/transport-locations/:location_id/prices - set transport location prices in lounge (requires approval)")
-				loungesProtected.POST("/:id/transport-locations/:location_id/prices",middleware.RequireApprovedLoungeOwner(loungeOwnerRepository),loungeTransportLocationPriceHandler.SetLoungeTransportLocationPrices)
+				loungesProtected.POST("/:id/transport-locations/:location_id/prices", middleware.RequireApprovedLoungeOwner(loungeOwnerRepository), loungeTransportLocationPriceHandler.SetLoungeTransportLocationPrices)
 
-				// lounge staff approval management 
+				// lounge staff approval management
 				logger.Info(" ✅ PUT /api/v1/lounges/:id/staff/:staff_id/approval - set approval status for staff (requires approval)")
-				loungesProtected.PUT("/:id/staff/:staff_id/approval",middleware.RequireApprovedLoungeOwner(loungeOwnerRepository),loungeStaffHandler.ApproveStaff)
+				loungesProtected.PUT("/:id/staff/:staff_id/approval", middleware.RequireApprovedLoungeOwner(loungeOwnerRepository), loungeStaffHandler.ApproveStaff)
 				logger.Info("✅ GET /api/v1/lounges/:id/staff - get staff with filtering (read-only, no approval needed)")
-				loungesProtected.GET("/:id/staff",loungeStaffHandler.GetStaffByLoungeWithApprovalFilter)
+				loungesProtected.GET("/:id/staff", loungeStaffHandler.GetStaffByLoungeWithApprovalFilter)
 
 			}
 		}
@@ -753,7 +779,6 @@ func main() {
 			loungesProtectedProducts.GET("/:id/bookings", loungeBookingHandler.GetLoungeBookingsForOwner)
 			logger.Info("  ✅ GET /api/v1/lounges/:id/bookings/today (owner/staff, read-only)")
 			loungesProtectedProducts.GET("/:id/bookings/today", loungeBookingHandler.GetTodaysBookings)
-
 
 		}
 
