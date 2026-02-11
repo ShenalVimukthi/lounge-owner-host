@@ -125,6 +125,8 @@ tags:
     description: Lounge product (food/beverages) management
   - name: Lounge Orders
     description: Lounge order management for food/beverages
+  - name: Active Trips
+    description: Active trip passenger management and operations for conductors/drivers
 
 paths:
   # ============================================================================
@@ -1302,12 +1304,11 @@ paths:
           description: Internal server error
     get:
       summary: List all seat layout templates
-      description: Get all bus seat layout templates with optional filtering
+      description: Get all bus seat layout templates with optional filtering (public endpoint)
       operationId: listSeatLayoutTemplates
       tags:
         - Bus Seat Layout
-      security:
-        - BearerAuth: []
+      security: []
       parameters:
         - name: active_only
           in: query
@@ -2170,6 +2171,355 @@ paths:
           description: Not authorized to view this trip
         "404":
           description: Active trip not found
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  # ============================================================================
+  # Active Trip Passenger Management Endpoints (Conductor Operations)
+  # ============================================================================
+  /api/v1/active-trips/passengers:
+    get:
+      summary: Get all passengers for active trip
+      description: |
+        Retrieve list of all passengers for the conductor's current active trip.
+        Shows passenger details, seat numbers, boarding/destination stops, and status.
+      operationId: getActiveTripPassengers
+      tags:
+        - Active Trips
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Passengers retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  passengers:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ActiveTripPassenger"
+                  total:
+                    type: integer
+                    example: 45
+                  active_trip_id:
+                    type: string
+                    format: uuid
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: No active trip found for this conductor
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/v1/active-trips/passengers/board:
+    put:
+      summary: Board passenger
+      description: |
+        Mark a passenger as boarded on the bus.
+        Updates passenger status to 'boarded' and records boarding timestamp.
+      operationId: boardPassenger
+      tags:
+        - Active Trips
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - passenger_id
+              properties:
+                passenger_id:
+                  type: string
+                  format: uuid
+                  description: The ID of the passenger to board
+      responses:
+        "200":
+          description: Passenger boarded successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Passenger boarded successfully"
+                  passenger:
+                    $ref: "#/components/schemas/ActiveTripPassenger"
+        "400":
+          description: Invalid request or passenger cannot be boarded
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Passenger not found
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/v1/active-trips/passengers/pending:
+    put:
+      summary: Update passenger status to pending
+      description: |
+        Change passenger status back to pending.
+        Used when a boarding needs to be reversed.
+      operationId: updatePassengerToPending
+      tags:
+        - Active Trips
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - passenger_id
+              properties:
+                passenger_id:
+                  type: string
+                  format: uuid
+      responses:
+        "200":
+          description: Status updated to pending
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Passenger status updated to pending"
+        "400":
+          description: Invalid request
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Passenger not found
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/v1/active-trips/passengers/cancelled:
+    put:
+      summary: Cancel passenger
+      description: |
+        Mark a passenger as cancelled for this trip.
+        Used when a passenger no-shows or cancels mid-trip.
+      operationId: cancelPassenger
+      tags:
+        - Active Trips
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - passenger_id
+              properties:
+                passenger_id:
+                  type: string
+                  format: uuid
+                reason:
+                  type: string
+                  example: "Passenger did not show up"
+      responses:
+        "200":
+          description: Passenger cancelled
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Passenger cancelled successfully"
+        "400":
+          description: Invalid request
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Passenger not found
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/v1/active-trips/passengers/verify:
+    post:
+      summary: Verify passenger booking
+      description: |
+        Verify a passenger's booking before boarding using booking reference.
+        Returns passenger details if booking is valid for this trip.
+      operationId: verifyPassenger
+      tags:
+        - Active Trips
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - booking_reference
+              properties:
+                booking_reference:
+                  type: string
+                  example: "BK-20250209-ABC123"
+                  description: "The passenger's booking reference code"
+      responses:
+        "200":
+          description: Passenger verified
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Passenger verified successfully"
+                  passenger:
+                    $ref: "#/components/schemas/ActiveTripPassenger"
+        "400":
+          description: Invalid booking reference or booking not for this trip
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Booking not found
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/v1/active-trips/passengers/confirmed:
+    put:
+      summary: Confirm passenger
+      description: |
+        Update passenger status to confirmed.
+        Used in the booking confirmation workflow.
+      operationId: confirmPassenger
+      tags:
+        - Active Trips
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - passenger_id
+              properties:
+                passenger_id:
+                  type: string
+                  format: uuid
+      responses:
+        "200":
+          description: Passenger confirmed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Passenger confirmed successfully"
+        "400":
+          description: Invalid request
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Passenger not found
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/v1/active-trips/passengers/in-transit:
+    put:
+      summary: Mark passenger as in-transit
+      description: |
+        Update passenger status to in-transit.
+        Used when passenger is actively traveling on the bus.
+      operationId: updatePassengerToInTransit
+      tags:
+        - Active Trips
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - passenger_id
+              properties:
+                passenger_id:
+                  type: string
+                  format: uuid
+      responses:
+        "200":
+          description: Status updated to in-transit
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Passenger status updated to in-transit"
+        "400":
+          description: Invalid request
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Passenger not found
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/v1/active-trips/passengers/completed:
+    put:
+      summary: Mark passenger as completed
+      description: |
+        Update passenger status to completed (arrived at destination).
+        Used when passenger alights at their stop.
+      operationId: updatePassengerToCompleted
+      tags:
+        - Active Trips
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - passenger_id
+              properties:
+                passenger_id:
+                  type: string
+                  format: uuid
+      responses:
+        "200":
+          description: Status updated to completed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Passenger status updated to completed"
+        "400":
+          description: Invalid request
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Passenger not found
         "500":
           $ref: "#/components/responses/InternalServerError"
 
@@ -4797,6 +5147,78 @@ paths:
         "500":
           $ref: "#/components/responses/InternalServerError"
 
+  /api/v1/lounges/{lounge_id}/staff/direct-add:
+    post:
+      summary: Directly add staff to lounge (Owner only)
+      description: |
+        Directly add a staff member to the lounge by the owner.
+        Unlike the standard staff invite, this allows the owner to add staff directly
+        without going through an approval process.
+
+        **Required:** Lounge owner must be approved.
+      operationId: addStaffToLoungeDirectByOwner
+      tags:
+        - Lounge Owner
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: lounge_id
+          in: path
+          required: true
+          description: Lounge UUID
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - phone
+                - first_name
+                - last_name
+              properties:
+                phone:
+                  type: string
+                  example: "+94771234567"
+                  description: "Staff member's phone number"
+                first_name:
+                  type: string
+                  example: "John"
+                  description: "Staff member's first name"
+                last_name:
+                  type: string
+                  example: "Doe"
+                  description: "Staff member's last name"
+                email:
+                  type: string
+                  format: email
+                  example: "john.doe@example.com"
+                  description: "Staff member's email (optional)"
+      responses:
+        "201":
+          description: Staff member added successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Staff member added successfully"
+                  staff:
+                    $ref: "#/components/schemas/LoungeStaff"
+        "400":
+          description: Invalid request or staff already exists
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Lounge not found
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
     get:
       summary: Get staff for lounge with optional filtering
       description: |
@@ -6196,24 +6618,30 @@ paths:
         "500":
           $ref: "#/components/responses/InternalServerError"
 
-  /api/v1/lounge-bookings/reference/{ref}:
+  /api/v1/lounge-bookings/reference/{reference}:
     get:
       summary: Get lounge booking by reference
       description: |
         Retrieve a lounge booking by its booking reference number.
         Useful for QR code scanning and quick lookup.
+
+        **Authorization:** Accessible by:
+        - Booking owner (passenger)
+        - Lounge owner (if booking is at their lounge)
+        - Approved & active lounge staff (if booking is at their lounge)
       operationId: getLoungeBookingByReference
       tags:
         - Lounge Bookings
       security:
         - BearerAuth: []
       parameters:
-        - name: ref
+        - name: reference
           in: path
           required: true
           schema:
             type: string
-          example: "LB-20250101-ABC123"
+          example: "LNG-b7336f"
+          description: "The booking reference code (format: LNG-xxxxxx)"
       responses:
         "200":
           description: Booking retrieved successfully
@@ -10166,6 +10594,96 @@ components:
         message:
           type: string
           example: "Your account must be verified by admin before you can perform this operation. Please wait for verification or contact support."
+
+    # Active Trip Passenger Schema
+    ActiveTripPassenger:
+      type: object
+      description: |
+        Passenger information for an active trip.
+        Used by conductors to manage passenger boarding, status, and journey lifecycle.
+      properties:
+        passenger_id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+          description: Unique passenger identifier
+        booking_id:
+          type: string
+          format: uuid
+          example: "660e8400-e29b-41d4-a716-446655440001"
+          description: Associated booking ID
+        booking_reference:
+          type: string
+          example: "BK-20250209-ABC123"
+          description: Human-readable booking reference
+        first_name:
+          type: string
+          example: "John"
+        last_name:
+          type: string
+          example: "Doe"
+        full_name:
+          type: string
+          example: "John Doe"
+        phone:
+          type: string
+          example: "+94771234567"
+        email:
+          type: string
+          format: email
+          nullable: true
+          example: "john.doe@example.com"
+        seat_number:
+          type: string
+          example: "A12"
+          description: Assigned seat number
+        boarding_stop:
+          type: string
+          example: "Colombo Fort"
+          description: Where passenger boards
+        destination_stop:
+          type: string
+          example: "Kandy"
+          description: Where passenger alights
+        boarding_time:
+          type: string
+          format: time
+          example: "08:30:00"
+          description: Scheduled boarding time
+        fare:
+          type: number
+          format: double
+          example: 450.00
+          description: Ticket fare amount
+        status:
+          type: string
+          enum: [pending, confirmed, boarded, in-transit, completed, cancelled]
+          example: "boarded"
+          description: Current passenger status
+        boarded_at:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2025-02-09T08:35:00Z"
+          description: Actual boarding timestamp
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2025-02-09T12:15:00Z"
+          description: Actual completion/alighting timestamp
+        is_verified:
+          type: boolean
+          example: true
+          description: Whether booking has been verified by conductor
+        special_requirements:
+          type: string
+          nullable: true
+          example: "Wheelchair accessible"
+        created_at:
+          type: string
+          format: date-time
+          example: "2025-02-09T08:00:00Z"
 
     User:
       type: object
