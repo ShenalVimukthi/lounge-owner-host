@@ -1210,7 +1210,28 @@ func (h *LoungeBookingHandler) GetLoungeBookingsForOwner(c *gin.Context) {
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
 	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
 
-	bookings, err := h.bookingRepo.GetLoungeBookingsByLoungeID(loungeID, limit, offset)
+	statusQuery := strings.TrimSpace(c.Query("status"))
+	var status *string
+	if statusQuery != "" {
+		status = &statusQuery
+	}
+
+	dateQuery := strings.TrimSpace(c.Query("date"))
+	var bookingDate *string
+	if dateQuery != "" {
+		parsedDate, err := time.Parse("2006-01-02", dateQuery)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, ErrorResponse{
+				Error:   "invalid_date",
+				Message: "Invalid date format. Use YYYY-MM-DD",
+			})
+			return
+		}
+		formattedDate := parsedDate.Format("2006-01-02")
+		bookingDate = &formattedDate
+	}
+
+	bookings, err := h.bookingRepo.GetLoungeBookingsByLoungeID(loungeID, status, bookingDate, limit, offset)
 	if err != nil {
 		log.Printf("ERROR: Failed to get lounge bookings for owner: %v", err)
 		c.JSON(http.StatusInternalServerError, ErrorResponse{

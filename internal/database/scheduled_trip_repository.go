@@ -278,7 +278,7 @@ func (r *ScheduledTripRepository) GetByPermitAndDateRange(permitID string, start
 // GetBookableTrips retrieves bookable trips within a date range
 func (r *ScheduledTripRepository) GetBookableTrips(startDate, endDate time.Time) ([]models.ScheduledTrip, error) {
 	query := `
-		SELECT id, trip_schedule_id, permit_id, departure_datetime,
+		SELECT id, trip_schedule_id, bus_owner_route_id, permit_id, departure_datetime,
 			   estimated_duration_minutes, assigned_driver_id, assigned_conductor_id,
 			   seat_layout_id, is_bookable, ever_published, base_fare, status, cancellation_reason, cancelled_at,
 			   assignment_deadline, created_at, updated_at

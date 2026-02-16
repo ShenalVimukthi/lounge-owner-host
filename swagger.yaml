@@ -14,7 +14,12 @@ info:
 
     ## Authentication Flow
     1. Request OTP via `/auth/send-otp`
-    2. Verify OTP via `/auth/verify-otp` or `/auth/verify-otp-staff`
+    2. Verify OTP via:
+       - `/auth/verify-otp` - auto-assigns passenger role
+       - `/auth/verify-otp-generic` - no role assignment (foundation for multi-role flows)
+       - `/auth/verify-otp-staff` - for staff (driver/conductor)
+       - `/auth/verify-otp-lounge-owner` - for lounge owners
+       - `/auth/verify-otp-lounge-staff` - for lounge staff
     3. Receive JWT access & refresh tokens
     4. Use access token for protected endpoints
     5. Refresh token when access token expires
@@ -419,6 +424,97 @@ paths:
         "500":
           $ref: "#/components/responses/InternalServerError"
 
+  /api/v1/auth/verify-otp-generic:
+    post:
+      summary: Verify OTP (Generic - No Role Assignment)
+      description: |
+        Generic OTP verification endpoint without automatic role assignment.
+
+        **Purpose:** Foundation for multi-role user registration flows.
+
+        **New Users:** Creates user with NO role assigned (empty roles array).
+
+        **Existing Users:** Returns with their current roles.
+
+        **Role Assignment:** Use specific endpoints after verification:
+        - `/api/v1/auth/verify-otp-lounge-owner` - to assign lounge_owner role
+        - `/api/v1/auth/verify-otp-lounge-staff` - to assign lounge_staff role
+        - `/api/v1/auth/verify-otp-staff` - for staff (driver/conductor) role
+
+        **Multi-role Architecture:**
+        - User authentication data stored in `users` table
+        - Returns empty roles for new users
+        - Returns existing roles for returning users
+        - No automatic profile creation
+      operationId: verifyOtpGeneric
+      tags:
+        - Authentication
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - phone_number
+                - otp
+              properties:
+                phone_number:
+                  type: string
+                  pattern: '^\+94[0-9]{9}$'
+                  example: "+94771234567"
+                  description: Phone number in E.164 format
+                otp:
+                  type: string
+                  minLength: 6
+                  maxLength: 6
+                  example: "123456"
+                  description: 6-digit OTP code
+      responses:
+        "200":
+          description: OTP verified successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "OTP verified successfully"
+                  access_token:
+                    type: string
+                    example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                    description: JWT access token
+                  refresh_token:
+                    type: string
+                    example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                    description: JWT refresh token
+                  expires_in_seconds:
+                    type: integer
+                    example: 3600
+                    description: Access token expiry time in seconds
+                  is_new_user:
+                    type: boolean
+                    example: true
+                    description: Whether this is a newly created user
+                  profile_complete:
+                    type: boolean
+                    example: false
+                    description: Whether user profile is complete (always false for new users)
+                  roles:
+                    type: array
+                    items:
+                      type: string
+                    example: []
+                    description: User roles (empty array for new users, existing roles for returning users)
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/InvalidOtp"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
   /api/v1/auth/verify-otp-lounge-owner:
     post:
       summary: Verify OTP and login (Lounge Owner)
@@ -426,6 +522,20 @@ paths:
         Verifies the OTP for lounge owner users and returns JWT tokens.
 
         **Lounge Owner Specific:** Creates user with 'lounge_owner' role if new, or adds role if existing user.
+
+        **Lounge Owner Record Creation:** Automatically creates lounge_owner record with registration tracking.
+
+        **Registration Flow:**
+        1. Lounge owner sends OTP via `/auth/send-otp`
+        2. Lounge owner verifies OTP via this endpoint
+        3. System creates user with 'lounge_owner' role (or adds role to existing user)
+        4. System creates lounge_owner record with registration_step tracking
+        5. Returns registration_step for frontend navigation:
+           - `phone_verified` - OTP verified, needs personal info
+           - `personal_info` - Personal info added, needs NIC upload
+           - `nic_uploaded` - NIC uploaded, needs lounge details
+           - `lounge_added` - Lounge added, registration complete
+           - `completed` - Full registration completed
 
         **Multi-role Support:** Existing users (passengers) can become lounge owners.
       operationId: verifyOtpLoungeOwner
@@ -467,13 +577,15 @@ paths:
                   access_token:
                     type: string
                     example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                    description: JWT access token
                   refresh_token:
                     type: string
                     example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                    description: JWT refresh token
                   expires_in_seconds:
                     type: integer
                     example: 3600
-                    description: Access token expiry in seconds
+                    description: Access token expiry time in seconds
                   is_new_user:
                     type: boolean
                     example: true
@@ -481,49 +593,29 @@ paths:
                   profile_complete:
                     type: boolean
                     example: false
-                    description: Whether user has completed their profile
+                    description: Whether user profile is complete
                   roles:
                     type: array
                     items:
                       type: string
                     example: ["lounge_owner"]
-                    description: User's roles including lounge_owner
+                    description: User roles (includes 'lounge_owner')
+                  registration_step:
+                    type: string
+                    enum:
+                      [
+                        phone_verified,
+                        personal_info,
+                        nic_uploaded,
+                        lounge_added,
+                        completed,
+                      ]
+                    example: "phone_verified"
+                    description: Current registration step for navigation
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/InvalidOtp"
-        "404":
-          description: No OTP found for phone number
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  error:
-                    type: string
-                    example: "no_otp_found"
-                  message:
-                    type: string
-                    example: "No OTP found for this phone number. Please request an OTP first."
-                  code:
-                    type: string
-                    example: "NO_OTP"
-        "429":
-          description: Too many OTP validation attempts
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  error:
-                    type: string
-                    example: "max_attempts_exceeded"
-                  message:
-                    type: string
-                    example: "Maximum OTP validation attempts exceeded. Please request a new OTP."
-                  code:
-                    type: string
-                    example: "MAX_ATTEMPTS"
         "500":
           $ref: "#/components/responses/InternalServerError"
 
@@ -689,6 +781,150 @@ paths:
                   code:
                     type: string
                     example: "MAX_ATTEMPTS"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/v1/auth/verify-otp-lounge-staff-registered:
+    post:
+      summary: Verify OTP and login (Registered Lounge Staff)
+      description: |
+        Verifies the OTP for already-registered lounge staff and returns JWT tokens.
+
+        **Use case:** Lounge staff portal login (staff already registered).
+
+        **Behavior:**
+        - Validates OTP
+        - Requires existing user + lounge_staff record
+        - Returns staff profile data including approval and employment status
+        - Does NOT modify approval status (pending/approved/declined are allowed)
+      operationId: verifyOtpLoungeStaffRegistered
+      tags:
+        - Authentication
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - phone_number
+                - otp
+              properties:
+                phone_number:
+                  type: string
+                  pattern: '^\+94[0-9]{9}$'
+                  example: "+94771234567"
+                  description: Phone number in E.164 format
+                otp:
+                  type: string
+                  minLength: 6
+                  maxLength: 6
+                  example: "123456"
+                  description: 6-digit OTP code
+      responses:
+        "200":
+          description: OTP verified successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "OTP verified successfully"
+                  access_token:
+                    type: string
+                    example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                  refresh_token:
+                    type: string
+                    example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                  expires_in_seconds:
+                    type: integer
+                    example: 3600
+                  is_new_user:
+                    type: boolean
+                    example: false
+                  profile_complete:
+                    type: boolean
+                    example: true
+                  roles:
+                    type: array
+                    items:
+                      type: string
+                    example: ["lounge_staff"]
+                  approval_status:
+                    type: string
+                    enum: [pending, approved, declined]
+                    example: "pending"
+                  employment_status:
+                    type: string
+                    example: "active"
+                  staff:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      user_id:
+                        type: string
+                        format: uuid
+                      lounge_id:
+                        type: string
+                        format: uuid
+                      full_name:
+                        type: string
+                        nullable: true
+                      nic_number:
+                        type: string
+                        nullable: true
+                      email:
+                        type: string
+                        format: email
+                        nullable: true
+                      profile_completed:
+                        type: boolean
+                      approval_status:
+                        type: string
+                        enum: [pending, approved, declined]
+                      employment_status:
+                        type: string
+                      hired_date:
+                        type: string
+                        format: date-time
+                        nullable: true
+                      terminated_date:
+                        type: string
+                        format: date-time
+                        nullable: true
+                      notes:
+                        type: string
+                        nullable: true
+                      created_at:
+                        type: string
+                        format: date-time
+                      updated_at:
+                        type: string
+                        format: date-time
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/InvalidOtp"
+        "404":
+          description: User or lounge staff profile not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "staff_not_found"
+                  message:
+                    type: string
+                    example: "Lounge staff profile not found"
+        "429":
+          $ref: "#/components/responses/RateLimitExceeded"
         "500":
           $ref: "#/components/responses/InternalServerError"
 
@@ -5525,6 +5761,90 @@ paths:
                             type: string
                           status:
                             type: string
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/v1/lounge-staff/profile:
+    get:
+      summary: Get lounge staff profile
+      description: Returns the authenticated lounge staff profile including approval status and employment status
+      operationId: getLoungeStaffProfile
+      tags:
+        - Lounge Staff
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Lounge staff profile retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  user_id:
+                    type: string
+                    format: uuid
+                  phone:
+                    type: string
+                    example: "+94771234567"
+                    nullable: true
+                  lounge_id:
+                    type: string
+                    format: uuid
+                  full_name:
+                    type: string
+                    nullable: true
+                  nic_number:
+                    type: string
+                    nullable: true
+                  email:
+                    type: string
+                    format: email
+                    nullable: true
+                  profile_completed:
+                    type: boolean
+                  approval_status:
+                    type: string
+                    enum: [pending, approved, declined]
+                  employment_status:
+                    type: string
+                  hired_date:
+                    type: string
+                    format: date-time
+                    nullable: true
+                  terminated_date:
+                    type: string
+                    format: date-time
+                    nullable: true
+                  notes:
+                    type: string
+                    nullable: true
+                  created_at:
+                    type: string
+                    format: date-time
+                  updated_at:
+                    type: string
+                    format: date-time
+                  lounge:
+                    type: object
+                    nullable: true
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      lounge_name:
+                        type: string
+                      address:
+                        type: string
+                      status:
+                        type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
         "500":

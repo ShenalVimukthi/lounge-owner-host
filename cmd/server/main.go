@@ -200,7 +200,7 @@ func main() {
 	)
 	if cfg.OneSignalAppID == "" || cfg.OneSignalRestAPIKey == "" {
 		logger.Warn("⚠️ OneSignal credentials not configured - push notifications will not work")
-	}else{
+	} else {
 		logger.Info("OneSignal credentials configured ")
 	}
 
@@ -491,6 +491,7 @@ func main() {
 		{
 			auth.POST("/send-otp", authHandler.SendOTP)
 			auth.POST("/verify-otp", authHandler.VerifyOTP)
+			auth.POST("/verify-otp-generic", authHandler.VerifyOTPGeneric)
 			auth.POST("/verify-otp-staff", authHandler.VerifyOTPStaff)
 			// lounge_owner_specific routes
 			auth.POST("/verify-otp-lounge-owner", func(c *gin.Context) {
@@ -499,6 +500,10 @@ func main() {
 			// lounge_staff_specific routes
 			auth.POST("/verify-otp-lounge-staff", func(c *gin.Context) {
 				authHandler.VerifyOTPLoungeStaff(c, loungeStaffRepository)
+			})
+			// lounge_staff_registered routes
+			auth.POST("/verify-otp-lounge-staff-registered", func(c *gin.Context) {
+				authHandler.VerifyOTPLoungeStaffRegistered(c, loungeStaffRepository)
 			})
 			// Lounge owner-specific endpoint
 			auth.GET("/otp-status/:phone", authHandler.GetOTPStatus)

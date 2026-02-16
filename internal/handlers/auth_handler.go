@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"database/sql"
 	"log"
 	"net/http"
 	"time"
@@ -86,6 +87,26 @@ type SendOTPResponse struct {
 type VerifyOTPRequest struct {
 	Phone string `json:"phone_number" binding:"required"`
 	OTP   string `json:"otp" binding:"required"`
+}
+
+// VerifyOTPLoungeStaffRegisteredRequest represents the request to verify OTP for registered lounge staff
+type VerifyOTPLoungeStaffRegisteredRequest struct {
+	Phone string `json:"phone_number" binding:"required"`
+	OTP   string `json:"otp" binding:"required"`
+}
+
+// VerifyOTPLoungeStaffRegisteredResponse represents the response for lounge staff OTP login
+type VerifyOTPLoungeStaffRegisteredResponse struct {
+	Message          string                 `json:"message"`
+	AccessToken      string                 `json:"access_token"`
+	RefreshToken     string                 `json:"refresh_token"`
+	ExpiresIn        int                    `json:"expires_in_seconds"`
+	IsNewUser        bool                   `json:"is_new_user"`
+	ProfileComplete  bool                   `json:"profile_complete"`
+	Roles            []string               `json:"roles"`
+	ApprovalStatus   string                 `json:"approval_status"`
+	EmploymentStatus string                 `json:"employment_status"`
+	Staff            map[string]interface{} `json:"staff"`
 }
 
 // NEW Added struct explicitly for loungeStaff OTP verification and handling
@@ -1180,6 +1201,247 @@ func (h *AuthHandler) VerifyOTPLoungeStaff(c *gin.Context, loungeStaffRepo *data
 
 }
 
+// VerifyOTPLoungeStaffRegistered handles POST /api/v1/auth/verify-otp-lounge-staff-registered
+// It verifies OTP for already-registered lounge staff and returns staff profile with approval status.
+func (h *AuthHandler) VerifyOTPLoungeStaffRegistered(c *gin.Context, loungeStaffRepo *database.LoungeStaffRepository) {
+	var req VerifyOTPLoungeStaffRegisteredRequest
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Error:   "validation_error",
+			Message: "Invalid request body",
+		})
+		return
+	}
+
+	// Validate phone number
+	phone, err := h.phoneValidator.Validate(req.Phone)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Error:   "invalid_phone",
+			Message: err.Error(),
+		})
+		return
+	}
+
+	// Client info
+	clientIP := utils.GetRealIP(c)
+	userAgent := utils.GetUserAgent(c)
+
+	remainingBefore, _ := h.otpService.GetRemainingAttempts(phone)
+
+	// Validate OTP
+	valid, err := h.otpService.ValidateOTP(phone, req.OTP)
+	if err != nil {
+		attempts := 3 - remainingBefore + 1
+		h.auditService.LogOTPVerification(nil, phone, false, attempts, clientIP, userAgent, err.Error())
+
+		switch err {
+		case services.ErrOTPExpired:
+			c.JSON(http.StatusBadRequest, ErrorResponse{
+				Error:   "otp_expired",
+				Message: "OTP has expired. Please request a new one.",
+				Code:    "OTP_EXPIRED",
+			})
+		case services.ErrOTPInvalid:
+			remaining, _ := h.otpService.GetRemainingAttempts(phone)
+			c.JSON(http.StatusBadRequest, ErrorResponse{
+				Error:   "otp_invalid",
+				Message: "Invalid OTP code",
+				Code:    "OTP_INVALID",
+			})
+			c.Header("X-Remaining-Attempts", string(rune(remaining)))
+		case services.ErrMaxAttemptsExceeded:
+			c.JSON(http.StatusTooManyRequests, ErrorResponse{
+				Error:   "max_attempts_exceeded",
+				Message: "Maximum OTP validation attempts exceeded. Please request a new OTP.",
+				Code:    "MAX_ATTEMPTS",
+			})
+		case services.ErrNoOTPFound:
+			c.JSON(http.StatusNotFound, ErrorResponse{
+				Error:   "no_otp_found",
+				Message: "No OTP found for this phone number. Please request an OTP first.",
+				Code:    "NO_OTP",
+			})
+		case services.ErrOTPAlreadyUsed:
+			c.JSON(http.StatusBadRequest, ErrorResponse{
+				Error:   "otp_already_used",
+				Message: "This OTP has already been used. Please request a new one.",
+				Code:    "OTP_USED",
+			})
+		default:
+			c.JSON(http.StatusInternalServerError, ErrorResponse{
+				Error:   "validation_failed",
+				Message: "Failed to validate OTP",
+			})
+		}
+		return
+	}
+
+	if !valid {
+		attempts := 3 - remainingBefore + 1
+		h.auditService.LogOTPVerification(nil, phone, false, attempts, clientIP, userAgent, "invalid_code")
+
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Error:   "otp_invalid",
+			Message: "Invalid OTP code",
+		})
+		return
+	}
+
+	// User must already exist
+	user, err := h.userRepository.GetUserByPhone(phone)
+	if err != nil {
+		log.Printf("ERROR: Failed to check existing user for phone %s: %v", phone, err)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Error:   "user_check_failed",
+			Message: "Failed to check user status",
+		})
+		return
+	}
+
+	if user == nil {
+		c.JSON(http.StatusNotFound, ErrorResponse{
+			Error:   "user_not_found",
+			Message: "User not found for this phone number",
+		})
+		return
+	}
+
+	// Fetch lounge staff record for this user
+	staff, err := loungeStaffRepo.GetStaffByUserID(user.ID)
+	if err != nil {
+		log.Printf("ERROR: Failed to get lounge staff record for user %s: %v", user.ID, err)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Error:   "staff_lookup_failed",
+			Message: "Failed to fetch lounge staff profile",
+		})
+		return
+	}
+
+	if staff == nil {
+		c.JSON(http.StatusNotFound, ErrorResponse{
+			Error:   "staff_not_found",
+			Message: "Lounge staff profile not found",
+		})
+		return
+	}
+
+	// Ensure lounge_staff role exists on user
+	hasRole := false
+	for _, role := range user.Roles {
+		if role == "lounge_staff" {
+			hasRole = true
+			break
+		}
+	}
+	if !hasRole {
+		if err := h.userRepository.AddRole(user.ID, "lounge_staff"); err != nil {
+			log.Printf("ERROR: Failed to add lounge_staff role to user %s: %v", user.ID, err)
+		} else {
+			user.Roles = append(user.Roles, "lounge_staff")
+		}
+	}
+
+	// Generate tokens
+	accessToken, err := h.jwtService.GenerateAccessToken(user.ID, user.Phone, user.Roles, user.ProfileCompleted)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Error:   "token_generation_failed",
+			Message: "Failed to generate access token",
+		})
+		return
+	}
+
+	refreshToken, err := h.jwtService.GenerateRefreshToken(user.ID, user.Phone)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Error:   "token_generation_failed",
+			Message: "Failed to generate refresh token",
+		})
+		return
+	}
+
+	// Store refresh token in database
+	expiresAt := time.Now().Add(7 * 24 * time.Hour)
+	deviceID := c.GetHeader("X-Device-ID")
+	deviceType := c.GetHeader("X-Device-Type")
+
+	err = h.refreshTokenRepository.StoreRefreshToken(
+		user.ID,
+		refreshToken,
+		deviceID,
+		deviceType,
+		clientIP,
+		userAgent,
+		expiresAt,
+	)
+	if err != nil {
+		log.Printf("WARNING: Failed to store refresh token for user %s: %v", user.ID, err)
+	}
+
+	// Audit & session
+	h.auditService.LogOTPVerification(&user.ID, phone, true, 3-remainingBefore+1, clientIP, userAgent, "")
+	h.auditService.LogLogin(user.ID, phone, clientIP, userAgent, deviceID, deviceType)
+	if deviceID != "" && deviceType != "" {
+		_, _ = h.userSessionRepository.CreateOrUpdateSession(
+			user.ID,
+			deviceID,
+			deviceType,
+			c.GetHeader("X-Device-Model"),
+			c.GetHeader("X-App-Version"),
+			c.GetHeader("X-OS-Version"),
+			clientIP,
+			c.GetHeader("X-FCM-Token"),
+		)
+	}
+
+	// Helpers for nullable fields
+	getNullString := func(ns sql.NullString) interface{} {
+		if ns.Valid {
+			return ns.String
+		}
+		return nil
+	}
+	getNullTime := func(nt sql.NullTime) interface{} {
+		if nt.Valid {
+			return nt.Time
+		}
+		return nil
+	}
+
+	staffPayload := map[string]interface{}{
+		"id":                staff.ID,
+		"user_id":           staff.UserID,
+		"lounge_id":         staff.LoungeID,
+		"full_name":         getNullString(staff.FullName),
+		"nic_number":        getNullString(staff.NICNumber),
+		"email":             getNullString(staff.Email),
+		"profile_completed": staff.ProfileCompleted,
+		"approval_status":   staff.ApprovalStatus,
+		"employment_status": staff.EmploymentStatus,
+		"hired_date":        getNullTime(staff.HiredDate),
+		"terminated_date":   getNullTime(staff.TerminatedDate),
+		"notes":             getNullString(staff.Notes),
+		"created_at":        staff.CreatedAt,
+		"updated_at":        staff.UpdatedAt,
+	}
+
+	// Response
+	c.JSON(http.StatusOK, VerifyOTPLoungeStaffRegisteredResponse{
+		Message:          "OTP verified successfully",
+		AccessToken:      accessToken,
+		RefreshToken:     refreshToken,
+		ExpiresIn:        3600,
+		IsNewUser:        false,
+		ProfileComplete:  staff.ProfileCompleted,
+		Roles:            user.Roles,
+		ApprovalStatus:   string(staff.ApprovalStatus),
+		EmploymentStatus: string(staff.EmploymentStatus),
+		Staff:            staffPayload,
+	})
+}
+
 // GetOTPStatus handles GET /api/v1/auth/otp-status/:phone
 func (h *AuthHandler) GetOTPStatus(c *gin.Context) {
 	phone := c.Param("phone")
@@ -1883,5 +2145,216 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"message": "Successfully logged out",
+	})
+}
+
+// VerifyOTPGeneric handles POST /api/v1/auth/verify-otp-generic
+// Generic OTP verification endpoint that:
+// - Creates user with NO role assigned if new
+// - Returns empty roles array for new users
+// - Returns existing roles for existing users
+// - Does NOT automatically assign any role
+func (h *AuthHandler) VerifyOTPGeneric(c *gin.Context) {
+	var req VerifyOTPRequest
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Error:   "validation_error",
+			Message: "Invalid request body",
+		})
+		return
+	}
+
+	// Validate phone number
+	phone, err := h.phoneValidator.Validate(req.Phone)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Error:   "invalid_phone",
+			Message: err.Error(),
+		})
+		return
+	}
+
+	// Get real client IP and user agent
+	clientIP := utils.GetRealIP(c)
+	userAgent := utils.GetUserAgent(c)
+
+	// Get current attempts before validation
+	remainingBefore, _ := h.otpService.GetRemainingAttempts(phone)
+
+	// Validate OTP
+	valid, err := h.otpService.ValidateOTP(phone, req.OTP)
+	if err != nil {
+		// Log failed verification
+		attempts := 3 - remainingBefore + 1
+		h.auditService.LogOTPVerification(nil, phone, false, attempts, clientIP, userAgent, err.Error())
+
+		// Check specific error types
+		switch err {
+		case services.ErrOTPExpired:
+			c.JSON(http.StatusBadRequest, ErrorResponse{
+				Error:   "otp_expired",
+				Message: "OTP has expired. Please request a new one.",
+				Code:    "OTP_EXPIRED",
+			})
+		case services.ErrOTPInvalid:
+			remaining, _ := h.otpService.GetRemainingAttempts(phone)
+			c.JSON(http.StatusBadRequest, ErrorResponse{
+				Error:   "otp_invalid",
+				Message: "Invalid OTP code",
+				Code:    "OTP_INVALID",
+			})
+			c.Header("X-Remaining-Attempts", string(rune(remaining)))
+		case services.ErrMaxAttemptsExceeded:
+			c.JSON(http.StatusTooManyRequests, ErrorResponse{
+				Error:   "max_attempts_exceeded",
+				Message: "Maximum OTP validation attempts exceeded. Please request a new OTP.",
+				Code:    "MAX_ATTEMPTS",
+			})
+		case services.ErrNoOTPFound:
+			c.JSON(http.StatusNotFound, ErrorResponse{
+				Error:   "no_otp_found",
+				Message: "No OTP found for this phone number. Please request an OTP first.",
+				Code:    "NO_OTP",
+			})
+		case services.ErrOTPAlreadyUsed:
+			c.JSON(http.StatusBadRequest, ErrorResponse{
+				Error:   "otp_already_used",
+				Message: "This OTP has already been used. Please request a new one.",
+				Code:    "OTP_USED",
+			})
+		default:
+			c.JSON(http.StatusInternalServerError, ErrorResponse{
+				Error:   "validation_failed",
+				Message: "Failed to validate OTP",
+			})
+		}
+		return
+	}
+
+	if !valid {
+		// Log invalid OTP
+		attempts := 3 - remainingBefore + 1
+		h.auditService.LogOTPVerification(nil, phone, false, attempts, clientIP, userAgent, "invalid_code")
+
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Error:   "otp_invalid",
+			Message: "Invalid OTP code",
+		})
+		return
+	}
+
+	// Check if user already exists
+	existingUser, err := h.userRepository.GetUserByPhone(phone)
+	if err != nil {
+		log.Printf("ERROR: Failed to check existing user for phone %s: %v", phone, err)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Error:   "user_check_failed",
+			Message: "Failed to check user status",
+		})
+		return
+	}
+
+	var user *models.User
+	isNew := false
+
+	if existingUser != nil {
+		// EXISTING USER - Return with their current roles
+		user = existingUser
+		log.Printf("INFO: Existing user verified via generic OTP endpoint: %s (roles: %v)", phone, user.Roles)
+	} else {
+		// NEW USER - Create with NO role assigned
+		user, err = h.userRepository.CreateUserWithoutRole(phone)
+		if err != nil {
+			log.Printf("ERROR: Failed to create user without role for phone %s: %v", phone, err)
+			c.JSON(http.StatusInternalServerError, ErrorResponse{
+				Error:   "user_creation_failed",
+				Message: "Failed to create user account",
+			})
+			return
+		}
+		isNew = true
+		log.Printf("INFO: New user created via generic OTP endpoint (no role assigned): %s", phone)
+	}
+
+	// Generate JWT tokens with user's actual roles (empty for new users without roles)
+	accessToken, err := h.jwtService.GenerateAccessToken(
+		user.ID,
+		user.Phone,
+		user.Roles, // Will be empty array for new users, or existing roles for returning users
+		false,      // profile_completed = false initially
+	)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Error:   "token_generation_failed",
+			Message: "Failed to generate access token",
+		})
+		return
+	}
+
+	refreshToken, err := h.jwtService.GenerateRefreshToken(user.ID, user.Phone)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Error:   "token_generation_failed",
+			Message: "Failed to generate refresh token",
+		})
+		return
+	}
+
+	// Store refresh token in database
+	expiresAt := time.Now().Add(7 * 24 * time.Hour) // 7 days
+
+	// Get device info from request if provided
+	deviceID := c.GetHeader("X-Device-ID")
+	deviceType := c.GetHeader("X-Device-Type")
+
+	err = h.refreshTokenRepository.StoreRefreshToken(
+		user.ID,
+		refreshToken,
+		deviceID,
+		deviceType,
+		clientIP,
+		userAgent,
+		expiresAt,
+	)
+	if err != nil {
+		// Log error but don't fail the login
+		log.Printf("WARNING: Failed to store refresh token for user %s: %v", user.ID, err)
+	}
+
+	// Log successful OTP verification
+	h.auditService.LogOTPVerification(&user.ID, phone, true, 3-remainingBefore+1, clientIP, userAgent, "")
+	h.auditService.LogLogin(user.ID, phone, clientIP, userAgent, deviceID, deviceType)
+
+	// Create or update user session
+	deviceModel := c.GetHeader("X-Device-Model")
+	appVersion := c.GetHeader("X-App-Version")
+	osVersion := c.GetHeader("X-OS-Version")
+	fcmToken := c.GetHeader("X-FCM-Token")
+
+	if deviceID != "" && deviceType != "" {
+		_, err = h.userSessionRepository.CreateOrUpdateSession(
+			user.ID,
+			deviceID,
+			deviceType,
+			deviceModel,
+			appVersion,
+			osVersion,
+			clientIP,
+			fcmToken,
+		)
+		if err != nil {
+			log.Printf("WARNING: Failed to create/update session for user %s: %v", user.ID, err)
+		}
+	}
+
+	c.JSON(http.StatusOK, VerifyOTPResponse{
+		Message:         "OTP verified successfully",
+		AccessToken:     accessToken,
+		RefreshToken:    refreshToken,
+		ExpiresIn:       3600, // 1 hour
+		IsNewUser:       isNew,
+		ProfileComplete: false,         // No profile until role is assigned
+		Roles:           user.Roles,    // Will be empty for new users
 	})
 }

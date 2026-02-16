@@ -411,7 +411,7 @@ func (r *LoungeBookingRepository) CreateLoungeBooking(
 	// Insert booking
 	bookingQuery := `
 		INSERT INTO lounge_bookings (
-			id, booking_reference, user_id, lounge_id, master_booking_id, bus_booking_id,
+			lounge_booking_id, booking_reference, user_id, lounge_id, master_booking_id, bus_booking_id,
 			booking_type, scheduled_arrival, scheduled_departure, 
 			number_of_guests, pricing_type, price_per_guest, base_price, pre_order_total, 
 			discount_amount, total_amount, status, payment_status,
@@ -575,7 +575,7 @@ func (r *LoungeBookingRepository) GetLoungeBookingsByUserID(userID uuid.UUID, li
 	var bookings []models.LoungeBookingListItem
 	query := `
 		SELECT 
-			lb.id, lb.booking_reference, lb.lounge_id, l.lounge_name,
+			lb.lounge_booking_id AS id, lb.booking_reference, lb.lounge_id, l.lounge_name,
 			lb.booking_type, lb.scheduled_arrival, lb.number_of_guests,
 			lb.total_amount, lb.status, lb.payment_status, lb.created_at
 		FROM lounge_bookings lb
@@ -593,7 +593,7 @@ func (r *LoungeBookingRepository) GetUpcomingLoungeBookingsByUserID(userID uuid.
 	var bookings []models.LoungeBookingListItem
 	query := `
 		SELECT 
-			lb.id, lb.booking_reference, lb.lounge_id, l.lounge_name,
+			lb.lounge_booking_id AS id, lb.booking_reference, lb.lounge_id, l.lounge_name,
 			lb.booking_type, lb.scheduled_arrival, lb.number_of_guests,
 			lb.total_amount, lb.status, lb.payment_status, lb.created_at
 		FROM lounge_bookings lb
@@ -612,7 +612,7 @@ func (r *LoungeBookingRepository) GetLoungeBookingsByUserIDAndStatus(userID uuid
 	var bookings []models.LoungeBookingListItem
 	query := `
 		SELECT 
-			lb.id, lb.booking_reference, lb.lounge_id, l.lounge_name,
+			lb.lounge_booking_id AS id, lb.booking_reference, lb.lounge_id, l.lounge_name,
 			lb.booking_type, lb.scheduled_arrival, lb.number_of_guests,
 			lb.total_amount, lb.status, lb.payment_status, lb.created_at
 		FROM lounge_bookings lb
@@ -627,20 +627,33 @@ func (r *LoungeBookingRepository) GetLoungeBookingsByUserIDAndStatus(userID uuid
 }
 
 // GetLoungeBookingsByLoungeID returns all bookings for a lounge (owner view)
-func (r *LoungeBookingRepository) GetLoungeBookingsByLoungeID(loungeID uuid.UUID, limit, offset int) ([]models.LoungeBookingListItem, error) {
+func (r *LoungeBookingRepository) GetLoungeBookingsByLoungeID(loungeID uuid.UUID, status *string, bookingDate *string, limit, offset int) ([]models.LoungeBookingListItem, error) {
 	var bookings []models.LoungeBookingListItem
 	query := `
 		SELECT 
-			lb.id, lb.booking_reference, lb.lounge_id, l.lounge_name,
+			lb.lounge_booking_id AS id, lb.booking_reference, lb.lounge_id, l.lounge_name,
 			lb.booking_type, lb.scheduled_arrival, lb.number_of_guests,
 			lb.total_amount, lb.status, lb.payment_status, lb.created_at
 		FROM lounge_bookings lb
 		JOIN lounges l ON lb.lounge_id = l.id
 		WHERE lb.lounge_id = $1
-		ORDER BY lb.scheduled_arrival DESC
-		LIMIT $2 OFFSET $3
 	`
-	err := r.db.Select(&bookings, query, loungeID, limit, offset)
+
+	args := []interface{}{loungeID}
+	if status != nil {
+		query += " AND lb.status = $2"
+		args = append(args, *status)
+	}
+
+	if bookingDate != nil {
+		query += fmt.Sprintf(" AND DATE(lb.scheduled_arrival) = $%d", len(args)+1)
+		args = append(args, *bookingDate)
+	}
+
+	query += fmt.Sprintf(" ORDER BY lb.scheduled_arrival DESC LIMIT $%d OFFSET $%d", len(args)+1, len(args)+2)
+	args = append(args, limit, offset)
+
+	err := r.db.Select(&bookings, query, args...)
 	return bookings, err
 }
 
@@ -649,7 +662,7 @@ func (r *LoungeBookingRepository) GetTodaysLoungeBookings(loungeID uuid.UUID) ([
 	var bookings []models.LoungeBookingListItem
 	query := `
 		SELECT 
-			lb.id, lb.booking_reference, lb.lounge_id, l.lounge_name,
+			lb.lounge_booking_id AS id, lb.booking_reference, lb.lounge_id, l.lounge_name,
 			lb.booking_type, lb.scheduled_arrival, lb.number_of_guests,
 			lb.total_amount, lb.status, lb.payment_status, lb.created_at
 		FROM lounge_bookings lb
@@ -664,7 +677,7 @@ func (r *LoungeBookingRepository) GetTodaysLoungeBookings(loungeID uuid.UUID) ([
 
 // UpdateLoungeBookingStatus updates the status of a booking
 func (r *LoungeBookingRepository) UpdateLoungeBookingStatus(bookingID uuid.UUID, status models.LoungeBookingStatus) error {
-	query := `UPDATE lounge_bookings SET status = $2, updated_at = NOW() WHERE id = $1`
+	query := `UPDATE lounge_bookings SET status = $2, updated_at = NOW() WHERE lounge_booking_id = $1`
 	_, err := r.db.Exec(query, bookingID, status)
 	return err
 }
@@ -679,7 +692,7 @@ func (r *LoungeBookingRepository) CancelLoungeBooking(bookingID uuid.UUID, reaso
 	query := `
 		UPDATE lounge_bookings 
 		SET status = 'cancelled', cancelled_at = NOW(), cancellation_reason = $2, updated_at = NOW()
-		WHERE id = $1
+		WHERE lounge_booking_id = $1
 	`
 	_, err := r.db.Exec(query, bookingID, reason)
 	return err
@@ -701,7 +714,7 @@ func (r *LoungeBookingRepository) CheckInBooking(bookingID uuid.UUID) error {
 	query := `
 		UPDATE lounge_bookings 
 		SET status = 'checked_in', actual_arrival = NOW(), updated_at = NOW()
-		WHERE id = $1 AND status = 'confirmed'
+		WHERE lounge_booking_id = $1 AND status = 'confirmed'
 	`
 	result, err := r.db.Exec(query, bookingID)
 	if err != nil {
@@ -719,7 +732,7 @@ func (r *LoungeBookingRepository) CompleteLoungeBooking(bookingID uuid.UUID) err
 	query := `
 		UPDATE lounge_bookings 
 		SET status = 'completed', actual_departure = NOW(), updated_at = NOW()
-		WHERE id = $1 AND status = 'checked_in'
+		WHERE lounge_booking_id = $1 AND status = 'checked_in'
 	`
 	_, err := r.db.Exec(query, bookingID)
 	return err
@@ -727,7 +740,7 @@ func (r *LoungeBookingRepository) CompleteLoungeBooking(bookingID uuid.UUID) err
 
 // UpdatePaymentStatus updates payment status
 func (r *LoungeBookingRepository) UpdatePaymentStatus(bookingID uuid.UUID, status models.LoungePaymentStatus) error {
-	query := `UPDATE lounge_bookings SET payment_status = $2, updated_at = NOW() WHERE id = $1`
+	query := `UPDATE lounge_bookings SET payment_status = $2, updated_at = NOW() WHERE lounge_booking_id = $1`
 	_, err := r.db.Exec(query, bookingID, status)
 	return err
 }
