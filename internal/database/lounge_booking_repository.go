@@ -487,6 +487,7 @@ func (r *LoungeBookingRepository) CreateLoungeBooking(
 	booking.PreOrders = preOrders
 	return booking, nil
 }
+
 // changed lb.id to lounge_booking_id
 // GetLoungeBookingByID returns a booking by ID with guests and pre-orders
 func (r *LoungeBookingRepository) GetLoungeBookingByID(bookingID uuid.UUID) (*models.LoungeBooking, error) {
@@ -576,7 +577,7 @@ func (r *LoungeBookingRepository) GetLoungeBookingsByUserID(userID uuid.UUID, li
 	query := `
 		SELECT 
 			lb.lounge_booking_id AS id, lb.booking_reference, lb.lounge_id, l.lounge_name,
-			lb.booking_type, lb.scheduled_arrival, lb.number_of_guests,
+			lb.booking_type, lb.scheduled_arrival, lb.number_of_guests, lb.primary_guest_name, lb.primary_guest_phone,
 			lb.total_amount, lb.status, lb.payment_status, lb.created_at
 		FROM lounge_bookings lb
 		JOIN lounges l ON lb.lounge_id = l.id
@@ -594,7 +595,7 @@ func (r *LoungeBookingRepository) GetUpcomingLoungeBookingsByUserID(userID uuid.
 	query := `
 		SELECT 
 			lb.lounge_booking_id AS id, lb.booking_reference, lb.lounge_id, l.lounge_name,
-			lb.booking_type, lb.scheduled_arrival, lb.number_of_guests,
+			lb.booking_type, lb.scheduled_arrival, lb.number_of_guests, lb.primary_guest_name, lb.primary_guest_phone,
 			lb.total_amount, lb.status, lb.payment_status, lb.created_at
 		FROM lounge_bookings lb
 		JOIN lounges l ON lb.lounge_id = l.id
@@ -613,7 +614,7 @@ func (r *LoungeBookingRepository) GetLoungeBookingsByUserIDAndStatus(userID uuid
 	query := `
 		SELECT 
 			lb.lounge_booking_id AS id, lb.booking_reference, lb.lounge_id, l.lounge_name,
-			lb.booking_type, lb.scheduled_arrival, lb.number_of_guests,
+			lb.booking_type, lb.scheduled_arrival, lb.number_of_guests, lb.primary_guest_name, lb.primary_guest_phone,
 			lb.total_amount, lb.status, lb.payment_status, lb.created_at
 		FROM lounge_bookings lb
 		JOIN lounges l ON lb.lounge_id = l.id
@@ -632,7 +633,7 @@ func (r *LoungeBookingRepository) GetLoungeBookingsByLoungeID(loungeID uuid.UUID
 	query := `
 		SELECT 
 			lb.lounge_booking_id AS id, lb.booking_reference, lb.lounge_id, l.lounge_name,
-			lb.booking_type, lb.scheduled_arrival, lb.number_of_guests,
+			lb.booking_type, lb.scheduled_arrival, lb.number_of_guests, lb.primary_guest_name, lb.primary_guest_phone,
 			lb.total_amount, lb.status, lb.payment_status, lb.created_at
 		FROM lounge_bookings lb
 		JOIN lounges l ON lb.lounge_id = l.id
@@ -657,13 +658,42 @@ func (r *LoungeBookingRepository) GetLoungeBookingsByLoungeID(loungeID uuid.UUID
 	return bookings, err
 }
 
+// GetLoungeBookingsWithOrdersByLoungeID returns lounge bookings with in-lounge orders bundled
+func (r *LoungeBookingRepository) GetLoungeBookingsWithOrdersByLoungeID(
+	loungeID uuid.UUID,
+	status *string,
+	bookingDate *string,
+	orderDate *string,
+	limit, offset int,
+) ([]models.LoungeBookingWithOrders, error) {
+	bookings, err := r.GetLoungeBookingsByLoungeID(loungeID, status, bookingDate, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]models.LoungeBookingWithOrders, 0, len(bookings))
+	for _, booking := range bookings {
+		orders, err := r.GetOrdersByBookingIDFiltered(booking.ID, orderDate)
+		if err != nil {
+			return nil, err
+		}
+
+		result = append(result, models.LoungeBookingWithOrders{
+			LoungeBookingListItem: booking,
+			Orders:                orders,
+		})
+	}
+
+	return result, nil
+}
+
 // GetTodaysLoungeBookings returns today's bookings for a lounge
 func (r *LoungeBookingRepository) GetTodaysLoungeBookings(loungeID uuid.UUID) ([]models.LoungeBookingListItem, error) {
 	var bookings []models.LoungeBookingListItem
 	query := `
 		SELECT 
 			lb.lounge_booking_id AS id, lb.booking_reference, lb.lounge_id, l.lounge_name,
-			lb.booking_type, lb.scheduled_arrival, lb.number_of_guests,
+			lb.booking_type, lb.scheduled_arrival, lb.number_of_guests, lb.primary_guest_name, lb.primary_guest_phone,
 			lb.total_amount, lb.status, lb.payment_status, lb.created_at
 		FROM lounge_bookings lb
 		JOIN lounges l ON lb.lounge_id = l.id
@@ -766,8 +796,8 @@ func (r *LoungeBookingRepository) CreateLoungeOrder(order *models.LoungeOrder, i
 
 	orderQuery := `
 		INSERT INTO lounge_orders (
-			id, lounge_booking_id, lounge_id, order_number, subtotal, 
-			discount_amount, total_amount, status, payment_status, notes, created_at, updated_at
+			id, lounge_booking_id, lounge_id, order_reference, subtotal,
+			discount_amount, total_amount, order_status, payment_status, special_instructions, created_at, updated_at
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 	`
 	_, err = tx.Exec(orderQuery,
@@ -809,17 +839,29 @@ func (r *LoungeBookingRepository) CreateLoungeOrder(order *models.LoungeOrder, i
 
 // GetOrdersByBookingID returns all orders for a booking
 func (r *LoungeBookingRepository) GetOrdersByBookingID(bookingID uuid.UUID) ([]models.LoungeOrder, error) {
+	return r.GetOrdersByBookingIDFiltered(bookingID, nil)
+}
+
+// GetOrdersByBookingIDFiltered returns all orders for a booking with optional order date filter (YYYY-MM-DD)
+func (r *LoungeBookingRepository) GetOrdersByBookingIDFiltered(bookingID uuid.UUID, orderDate *string) ([]models.LoungeOrder, error) {
 	var orders []models.LoungeOrder
 	query := `
-		SELECT id, lounge_booking_id, lounge_id, order_number, subtotal, 
-		       discount_amount, total_amount, status, payment_status, 
-		       payment_method, notes, prepared_by_staff, served_by_staff, 
+		SELECT id, lounge_booking_id, lounge_id, order_reference AS order_number, subtotal,
+		       discount_amount, total_amount, order_status AS status, payment_status, 
+		       payment_method, special_instructions AS notes, taken_by_user_id AS prepared_by_staff, served_by_user_id AS served_by_staff, 
 		       created_at, updated_at
 		FROM lounge_orders
 		WHERE lounge_booking_id = $1
-		ORDER BY created_at DESC
 	`
-	err := r.db.Select(&orders, query, bookingID)
+
+	args := []interface{}{bookingID}
+	if orderDate != nil {
+		query += fmt.Sprintf(" AND DATE(created_at) = $%d", len(args)+1)
+		args = append(args, *orderDate)
+	}
+
+	query += " ORDER BY created_at DESC"
+	err := r.db.Select(&orders, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -845,7 +887,7 @@ func (r *LoungeBookingRepository) GetOrdersByBookingID(bookingID uuid.UUID) ([]m
 
 // UpdateOrderStatus updates order status
 func (r *LoungeBookingRepository) UpdateOrderStatus(orderID uuid.UUID, status models.LoungeOrderStatus) error {
-	query := `UPDATE lounge_orders SET status = $2, updated_at = NOW() WHERE id = $1`
+	query := `UPDATE lounge_orders SET order_status = $2, updated_at = NOW() WHERE id = $1`
 	_, err := r.db.Exec(query, orderID, status)
 	return err
 }

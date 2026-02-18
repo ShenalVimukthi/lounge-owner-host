@@ -144,14 +144,6 @@ func (h *LoungeBookingHandler) CreateProduct(c *gin.Context) {
 
 	// Verify ownership
 	owner, err := h.loungeOwnerRepo.GetLoungeOwnerByUserID(userCtx.UserID)
-	if err != nil || owner == nil {
-		c.JSON(http.StatusForbidden, ErrorResponse{
-			Error:   "forbidden",
-			Message: "Not a lounge owner",
-		})
-		return
-	}
-
 	lounge, err := h.loungeRepo.GetLoungeByID(loungeID)
 	if err != nil || lounge == nil {
 		c.JSON(http.StatusNotFound, ErrorResponse{
@@ -161,12 +153,28 @@ func (h *LoungeBookingHandler) CreateProduct(c *gin.Context) {
 		return
 	}
 
-	if lounge.LoungeOwnerID != owner.ID {
-		c.JSON(http.StatusForbidden, ErrorResponse{
-			Error:   "forbidden",
-			Message: "You don't own this lounge",
-		})
-		return
+	isAuthorized := false
+	if err == nil && owner != nil && lounge.LoungeOwnerID == owner.ID {
+		isAuthorized = true
+	}
+
+	if !isAuthorized {
+		staff, staffErr := h.loungeStaffRepo.GetApprovedStaffaByUserID(userCtx.UserID)
+		if staffErr != nil {
+			c.JSON(http.StatusInternalServerError, ErrorResponse{
+				Error:   "database_error",
+				Message: "Failed to verify staff access",
+			})
+			return
+		}
+
+		if staff == nil || staff.LoungeID != loungeID {
+			c.JSON(http.StatusForbidden, ErrorResponse{
+				Error:   "forbidden",
+				Message: "Not authorized",
+			})
+			return
+		}
 	}
 
 	var req CreateProductRequest
@@ -1249,6 +1257,141 @@ func (h *LoungeBookingHandler) GetLoungeBookingsForOwner(c *gin.Context) {
 	})
 }
 
+// GetLoungeBookingsWithOrdersForOwner handles GET /api/v1/lounges/:id/bookings-with-orders
+func (h *LoungeBookingHandler) GetLoungeBookingsWithOrdersForOwner(c *gin.Context) {
+	userCtx, exists := middleware.GetUserContext(c)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{
+			Error:   "unauthorized",
+			Message: "User context not found",
+		})
+		return
+	}
+
+	loungeIDStr := c.Param("id")
+	loungeID, err := uuid.Parse(loungeIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Error:   "invalid_id",
+			Message: "Invalid lounge ID format",
+		})
+		return
+	}
+
+	lounge, err := h.loungeRepo.GetLoungeByID(loungeID)
+	if err != nil || lounge == nil {
+		c.JSON(http.StatusNotFound, ErrorResponse{
+			Error:   "not_found",
+			Message: "Lounge not found",
+		})
+		return
+	}
+
+	owner, _ := h.loungeOwnerRepo.GetLoungeOwnerByUserID(userCtx.UserID)
+	isOwner := owner != nil && lounge.LoungeOwnerID == owner.ID
+
+	if !isOwner {
+		staff, err := h.loungeStaffRepo.GetApprovedStaffaByUserID(userCtx.UserID)
+		if err != nil || staff == nil {
+			c.JSON(http.StatusForbidden, ErrorResponse{
+				Error:   "forbidden",
+				Message: "You don't have access to this lounge",
+			})
+			return
+		}
+		if staff.LoungeID != loungeID {
+			c.JSON(http.StatusForbidden, ErrorResponse{
+				Error:   "forbidden",
+				Message: "You don't have access to this lounge",
+			})
+			return
+		}
+	}
+
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
+	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+
+	statusQuery := strings.TrimSpace(c.Query("status"))
+	var status *string
+	if statusQuery != "" {
+		status = &statusQuery
+	}
+
+	bookingDateQuery := strings.TrimSpace(c.Query("booking_date"))
+	var bookingDate *string
+	if bookingDateQuery != "" {
+		parsedDate, err := time.Parse("2006-01-02", bookingDateQuery)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, ErrorResponse{
+				Error:   "invalid_booking_date",
+				Message: "Invalid booking_date format. Use YYYY-MM-DD",
+			})
+			return
+		}
+		formattedDate := parsedDate.Format("2006-01-02")
+		bookingDate = &formattedDate
+	}
+
+	orderDateQuery := strings.TrimSpace(c.Query("date"))
+	var orderDate *string
+	if orderDateQuery != "" {
+		parsedDate, err := time.Parse("2006-01-02", orderDateQuery)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, ErrorResponse{
+				Error:   "invalid_date",
+				Message: "Invalid date format. Use YYYY-MM-DD",
+			})
+			return
+		}
+		formattedDate := parsedDate.Format("2006-01-02")
+		orderDate = &formattedDate
+	}
+
+	bookingsWithOrders, err := h.bookingRepo.GetLoungeBookingsWithOrdersByLoungeID(loungeID, status, bookingDate, orderDate, limit, offset)
+	if err != nil {
+		log.Printf("ERROR: Failed to get lounge bookings with orders for owner: %v", err)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Error:   "database_error",
+			Message: "Failed to retrieve bookings with orders",
+		})
+		return
+	}
+
+	totalOrders := 0
+	totalOrderedItems := 0
+	for i := range bookingsWithOrders {
+		ordersCount := len(bookingsWithOrders[i].Orders)
+		orderedItemsCount := 0
+		ordersTotalAmount := 0.0
+		for _, order := range bookingsWithOrders[i].Orders {
+			orderedItemsCount += len(order.Items)
+			amount, err := strconv.ParseFloat(order.TotalAmount, 64)
+			if err == nil {
+				ordersTotalAmount += amount
+			}
+		}
+
+		bookingsWithOrders[i].OrdersCount = ordersCount
+		bookingsWithOrders[i].OrderedItemsCount = orderedItemsCount
+		bookingsWithOrders[i].OrdersTotalAmount = strconv.FormatFloat(ordersTotalAmount, 'f', 2, 64)
+
+		totalOrders += ordersCount
+		totalOrderedItems += orderedItemsCount
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"bookings":            bookingsWithOrders,
+		"lounge_id":           loungeID,
+		"limit":               limit,
+		"offset":              offset,
+		"total_bookings":      len(bookingsWithOrders),
+		"total_orders":        totalOrders,
+		"total_ordered_items": totalOrderedItems,
+		"order_date":          orderDate,
+		"booking_date":        bookingDate,
+	})
+}
+
 // GetTodaysBookings handles GET /api/v1/lounges/:id/bookings/today
 func (h *LoungeBookingHandler) GetTodaysBookings(c *gin.Context) {
 	userCtx, exists := middleware.GetUserContext(c)
@@ -1639,15 +1782,41 @@ func (h *LoungeBookingHandler) GetBookingOrders(c *gin.Context) {
 		owner, _ := h.loungeOwnerRepo.GetLoungeOwnerByUserID(userCtx.UserID)
 		lounge, _ := h.loungeRepo.GetLoungeByID(booking.LoungeID)
 		if owner == nil || lounge == nil || lounge.LoungeOwnerID != owner.ID {
-			c.JSON(http.StatusForbidden, ErrorResponse{
-				Error:   "forbidden",
-				Message: "Not authorized",
-			})
-			return
+			staff, staffErr := h.loungeStaffRepo.GetApprovedStaffaByUserID(userCtx.UserID)
+			if staffErr != nil {
+				c.JSON(http.StatusInternalServerError, ErrorResponse{
+					Error:   "database_error",
+					Message: "Failed to verify staff access",
+				})
+				return
+			}
+
+			if staff == nil || staff.LoungeID != booking.LoungeID {
+				c.JSON(http.StatusForbidden, ErrorResponse{
+					Error:   "forbidden",
+					Message: "Not authorized",
+				})
+				return
+			}
 		}
 	}
 
-	orders, err := h.bookingRepo.GetOrdersByBookingID(bookingID)
+	dateQuery := strings.TrimSpace(c.Query("date"))
+	var orderDate *string
+	if dateQuery != "" {
+		parsedDate, err := time.Parse("2006-01-02", dateQuery)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, ErrorResponse{
+				Error:   "invalid_date",
+				Message: "Invalid date format. Use YYYY-MM-DD",
+			})
+			return
+		}
+		formattedDate := parsedDate.Format("2006-01-02")
+		orderDate = &formattedDate
+	}
+
+	orders, err := h.bookingRepo.GetOrdersByBookingIDFiltered(bookingID, orderDate)
 	if err != nil {
 		log.Printf("ERROR: Failed to get booking orders: %v", err)
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
@@ -1657,10 +1826,123 @@ func (h *LoungeBookingHandler) GetBookingOrders(c *gin.Context) {
 		return
 	}
 
+	orderedItemsCount := 0
+	ordersTotalAmount := 0.0
+	for _, order := range orders {
+		orderedItemsCount += len(order.Items)
+		amount, err := strconv.ParseFloat(order.TotalAmount, 64)
+		if err == nil {
+			ordersTotalAmount += amount
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"orders":     orders,
-		"booking_id": bookingID,
-		"total":      len(orders),
+		"booking":            booking,
+		"orders":             orders,
+		"booking_id":         bookingID,
+		"orders_count":       len(orders),
+		"ordered_items_count": orderedItemsCount,
+		"orders_total_amount": strconv.FormatFloat(ordersTotalAmount, 'f', 2, 64),
+		"date":               orderDate,
+	})
+}
+
+// GetLoungeBookingWithOrders handles GET /api/v1/lounge-bookings/:id/with-orders
+func (h *LoungeBookingHandler) GetLoungeBookingWithOrders(c *gin.Context) {
+	userCtx, exists := middleware.GetUserContext(c)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{
+			Error:   "unauthorized",
+			Message: "User context not found",
+		})
+		return
+	}
+
+	bookingIDStr := c.Param("id")
+	bookingID, err := uuid.Parse(bookingIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Error:   "invalid_id",
+			Message: "Invalid booking ID format",
+		})
+		return
+	}
+
+	booking, err := h.bookingRepo.GetLoungeBookingByID(bookingID)
+	if err != nil || booking == nil {
+		c.JSON(http.StatusNotFound, ErrorResponse{
+			Error:   "not_found",
+			Message: "Booking not found",
+		})
+		return
+	}
+
+	if booking.UserID != userCtx.UserID {
+		owner, _ := h.loungeOwnerRepo.GetLoungeOwnerByUserID(userCtx.UserID)
+		lounge, _ := h.loungeRepo.GetLoungeByID(booking.LoungeID)
+		if owner == nil || lounge == nil || lounge.LoungeOwnerID != owner.ID {
+			staff, staffErr := h.loungeStaffRepo.GetApprovedStaffaByUserID(userCtx.UserID)
+			if staffErr != nil {
+				c.JSON(http.StatusInternalServerError, ErrorResponse{
+					Error:   "database_error",
+					Message: "Failed to verify staff access",
+				})
+				return
+			}
+
+			if staff == nil || staff.LoungeID != booking.LoungeID {
+				c.JSON(http.StatusForbidden, ErrorResponse{
+					Error:   "forbidden",
+					Message: "Not authorized",
+				})
+				return
+			}
+		}
+	}
+
+	dateQuery := strings.TrimSpace(c.Query("date"))
+	var orderDate *string
+	if dateQuery != "" {
+		parsedDate, err := time.Parse("2006-01-02", dateQuery)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, ErrorResponse{
+				Error:   "invalid_date",
+				Message: "Invalid date format. Use YYYY-MM-DD",
+			})
+			return
+		}
+		formattedDate := parsedDate.Format("2006-01-02")
+		orderDate = &formattedDate
+	}
+
+	orders, err := h.bookingRepo.GetOrdersByBookingIDFiltered(bookingID, orderDate)
+	if err != nil {
+		log.Printf("ERROR: Failed to get booking with orders: %v", err)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Error:   "database_error",
+			Message: "Failed to retrieve booking orders",
+		})
+		return
+	}
+
+	orderedItemsCount := 0
+	ordersTotalAmount := 0.0
+	for _, order := range orders {
+		orderedItemsCount += len(order.Items)
+		amount, err := strconv.ParseFloat(order.TotalAmount, 64)
+		if err == nil {
+			ordersTotalAmount += amount
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"booking":             booking,
+		"orders":              orders,
+		"booking_id":          bookingID,
+		"orders_count":        len(orders),
+		"ordered_items_count": orderedItemsCount,
+		"orders_total_amount": strconv.FormatFloat(ordersTotalAmount, 'f', 2, 64),
+		"date":                orderDate,
 	})
 }
 

@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"log"
 	"net/http"
+	"strconv"
+	"strings"
 
 	//"os/user"
 	"time"
@@ -21,9 +23,9 @@ import (
 
 // LoungeStaffHandler handles lounge staff-related HTTP requests
 type LoungeStaffHandler struct {
-	staffRepo       *database.LoungeStaffRepository
-	loungeRepo      *database.LoungeRepository
-	loungeOwnerRepo *database.LoungeOwnerRepository
+	staffRepo              *database.LoungeStaffRepository
+	loungeRepo             *database.LoungeRepository
+	loungeOwnerRepo        *database.LoungeOwnerRepository
 	// adding user repo (THIS WILL HELP IN FINDING IF A USER IS ALREADY REGISTERD WHEN ADDING BY OWNERS SIDE)
 	userRepo *database.UserRepository
 	// adding phone validator to validate phone numbers directly inside the handler(for owner to directly add staff)
@@ -32,6 +34,8 @@ type LoungeStaffHandler struct {
 	loungeStaffRepo *database.LoungeStaffRepository
 	// adding booking repository
 	bookingRepo *database.BookingRepository
+	// adding lounge booking repository for staff to view bookings
+	loungeBookingRepo *database.LoungeBookingRepository
 }
 
 // NewLoungeStaffHandler creates a new lounge staff handler
@@ -43,15 +47,17 @@ func NewLoungeStaffHandler(
 	phoneValidator *validator.PhoneValidator,
 	loungeStaffRepo *database.LoungeStaffRepository,
 	bookingRepo *database.BookingRepository,
+	loungeBookingRepo *database.LoungeBookingRepository,
 ) *LoungeStaffHandler {
 	return &LoungeStaffHandler{
-		staffRepo:       staffRepo,
-		loungeRepo:      loungeRepo,
-		loungeOwnerRepo: loungeOwnerRepo,
-		userRepo:        userRepo,
-		phoneValidator:  phoneValidator,
-		loungeStaffRepo: loungeStaffRepo,
-		bookingRepo: bookingRepo,
+		staffRepo:         staffRepo,
+		loungeRepo:        loungeRepo,
+		loungeOwnerRepo:   loungeOwnerRepo,
+		userRepo:          userRepo,
+		phoneValidator:    phoneValidator,
+		loungeStaffRepo:   loungeStaffRepo,
+		bookingRepo:       bookingRepo,
+		loungeBookingRepo: loungeBookingRepo,
 	}
 }
 
@@ -1095,6 +1101,83 @@ func (h *LoungeStaffHandler) GetBookingByReference(c *gin.Context){
 			}(),
 		},
 		"accessed_at": time.Now(),
+	})
+}
+
+// GetLoungeBookingsForStaff handles GET /api/v1/lounge-staff/bookings
+// Allows approved lounge staff to view all bookings for their assigned lounge
+func (h *LoungeStaffHandler) GetLoungeBookingsForStaff(c *gin.Context) {
+	// Get user context from JWT middleware
+	userCtx, exists := middleware.GetUserContext(c)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{
+			Error:   "unauthorized",
+			Message: "User context not found",
+		})
+		return
+	}
+
+	// Verify user is approved and active lounge staff
+	staff, err := h.loungeStaffRepo.GetApprovedStaffaByUserID(userCtx.UserID)
+	if err != nil {
+		log.Printf("ERROR: Failed to verify lounge staff for user %s: %v", userCtx.UserID, err)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Error:   "database_error",
+			Message: "Failed to verify staff credentials",
+		})
+		return
+	}
+
+	if staff == nil {
+		c.JSON(http.StatusForbidden, ErrorResponse{
+			Error:   "forbidden",
+			Message: "Access denied. You must be an approved and active lounge staff member to access bookings.",
+		})
+		return
+	}
+
+	// Get pagination parameters
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
+	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+
+	// Get optional filters
+	statusQuery := strings.TrimSpace(c.Query("status"))
+	var status *string
+	if statusQuery != "" {
+		status = &statusQuery
+	}
+
+	dateQuery := strings.TrimSpace(c.Query("date"))
+	var bookingDate *string
+	if dateQuery != "" {
+		parsedDate, err := time.Parse("2006-01-02", dateQuery)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, ErrorResponse{
+				Error:   "invalid_date",
+				Message: "Invalid date format. Use YYYY-MM-DD",
+			})
+			return
+		}
+		formattedDate := parsedDate.Format("2006-01-02")
+		bookingDate = &formattedDate
+	}
+
+	// Get bookings for the staff's assigned lounge
+	bookings, err := h.loungeBookingRepo.GetLoungeBookingsByLoungeID(staff.LoungeID, status, bookingDate, limit, offset)
+	if err != nil {
+		log.Printf("ERROR: Failed to get lounge bookings for staff %s: %v", staff.ID, err)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Error:   "database_error",
+			Message: "Failed to retrieve bookings",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"bookings":  bookings,
+		"lounge_id": staff.LoungeID,
+		"limit":     limit,
+		"offset":    offset,
 	})
 }
 

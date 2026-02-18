@@ -100,6 +100,8 @@ tags:
     description: Bus owner profile and onboarding management
   - name: Lounge Owner
     description: Lounge owner registration and management
+  - name: Lounge Staff
+    description: Lounge staff operations and booking management
   - name: Permits
     description: Route permit management
   - name: Buses
@@ -5850,6 +5852,240 @@ paths:
         "500":
           $ref: "#/components/responses/InternalServerError"
 
+  /api/v1/lounge-staff/bookings:
+    get:
+      summary: Get lounge bookings for staff
+      description: Retrieve all bookings for the lounge assigned to the authenticated lounge staff member. Supports filtering by status and date.
+      operationId: getLoungeBookingsForStaff
+      tags:
+        - Lounge Staff
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          description: Number of bookings to return
+          schema:
+            type: integer
+            default: 50
+            minimum: 1
+            maximum: 100
+        - name: offset
+          in: query
+          required: false
+          description: Pagination offset
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+        - name: status
+          in: query
+          required: false
+          description: Filter by booking status
+          schema:
+            type: string
+            enum: [pending, confirmed, checked_in, completed, cancelled]
+        - name: date
+          in: query
+          required: false
+          description: Filter by booking date (format YYYY-MM-DD)
+          schema:
+            type: string
+            format: date
+            example: "2026-02-17"
+      responses:
+        "200":
+          description: Bookings retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  bookings:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                          format: uuid
+                        booking_reference:
+                          type: string
+                          example: "LB20260217A1B2C3D4"
+                        lounge_id:
+                          type: string
+                          format: uuid
+                        lounge_name:
+                          type: string
+                        booking_type:
+                          type: string
+                        scheduled_arrival:
+                          type: string
+                          format: date-time
+                        number_of_guests:
+                          type: integer
+                        primary_guest_name:
+                          type: string
+                        primary_guest_phone:
+                          type: string
+                        total_amount:
+                          type: number
+                          format: decimal
+                        status:
+                          type: string
+                          enum:
+                            [
+                              pending,
+                              confirmed,
+                              checked_in,
+                              completed,
+                              cancelled,
+                            ]
+                        payment_status:
+                          type: string
+                          enum: [pending, paid, failed, refunded]
+                        created_at:
+                          type: string
+                          format: date-time
+                  lounge_id:
+                    type: string
+                    format: uuid
+                  limit:
+                    type: integer
+                  offset:
+                    type: integer
+        "400":
+          description: Invalid request parameters
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "invalid_date"
+                  message:
+                    type: string
+                    example: "Invalid date format. Use YYYY-MM-DD"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Access denied - user is not an approved lounge staff member
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "forbidden"
+                  message:
+                    type: string
+                    example: "Access denied. You must be an approved and active lounge staff member to access bookings."
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/v1/lounge-staff/bookings/reference/{reference}:
+    get:
+      summary: Get lounge booking by reference (Staff)
+      description: |
+        Retrieve a lounge booking by its booking reference number.
+        Dedicated endpoint for approved and active lounge staff members.
+        Staff can only access bookings for their assigned lounge.
+
+        This endpoint:
+        - Verifies the user is approved and active lounge staff
+        - Fetches the booking from lounge_bookings table by booking_reference
+        - Logs the access for auditing purposes
+        - Returns booking data with staff access metadata
+      operationId: getLoungeBookingByReferenceStaff
+      tags:
+        - Lounge Staff
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: reference
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "LNG-b7336f"
+          description: "The booking reference code (format: LNG-xxxxxx)"
+      responses:
+        "200":
+          description: Booking retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  booking:
+                    $ref: "#/components/schemas/LoungeBookingDetail"
+                  accessed_by:
+                    type: object
+                    description: Staff member who accessed this booking
+                    properties:
+                      staff_id:
+                        type: string
+                        format: uuid
+                      staff_name:
+                        type: string
+                        example: "John Doe"
+                      lounge_id:
+                        type: string
+                        format: uuid
+                      lounge_name:
+                        type: string
+                        example: "City Central Lounge"
+                  accessed_at:
+                    type: string
+                    format: date-time
+                    description: Timestamp when staff accessed the booking
+        "400":
+          description: Invalid request - missing booking reference
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "invalid_request"
+                  message:
+                    type: string
+                    example: "Booking reference is required"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Access denied - user is not an approved lounge staff member
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "forbidden"
+                  message:
+                    type: string
+                    example: "Access denied. You must be an approved and active lounge staff member to access bookings."
+        "404":
+          description: Booking not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "not_found"
+                  message:
+                    type: string
+                    example: "Booking not found"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
   # ============================================================================
   # Lounge Driver Management Endpoints
   # ============================================================================
@@ -7073,7 +7309,133 @@ paths:
                   bookings:
                     type: array
                     items:
-                      $ref: "#/components/schemas/LoungeBookingDetail"
+                      $ref: "#/components/schemas/LoungeBookingListItem"
+                  lounge_id:
+                    type: string
+                    format: uuid
+                  limit:
+                    type: integer
+                    example: 50
+                  offset:
+                    type: integer
+                    example: 0
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/v1/lounges/{lounge_id}/bookings-with-orders:
+    get:
+      summary: Get lounge bookings with ordered items (Owner)
+      description: |
+        Retrieve bookings for a lounge and include all in-lounge orders for each booking.
+
+        Requires lounge owner or approved lounge staff authentication.
+
+        Use this endpoint to get:
+        - Ordered items per booking
+        - Order count per booking
+        - Ordered item count per booking
+        - Aggregated order counts across the returned booking list
+      operationId: getLoungeBookingsWithOrdersForOwner
+      tags:
+        - Lounge Bookings
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: lounge_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              [pending, confirmed, checked_in, completed, cancelled, no_show]
+        - name: booking_date
+          in: query
+          required: false
+          description: Filter bookings by scheduled arrival date (YYYY-MM-DD)
+          schema:
+            type: string
+            format: date
+        - name: date
+          in: query
+          required: false
+          description: Filter included orders by order creation date (YYYY-MM-DD)
+          schema:
+            type: string
+            format: date
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 50
+            minimum: 1
+            maximum: 100
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+      responses:
+        "200":
+          description: Bookings with orders retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  bookings:
+                    type: array
+                    items:
+                      type: object
+                      allOf:
+                        - $ref: "#/components/schemas/LoungeBookingListItem"
+                        - type: object
+                          properties:
+                            orders:
+                              type: array
+                              items:
+                                $ref: "#/components/schemas/LoungeOrder"
+                            orders_count:
+                              type: integer
+                              example: 2
+                            ordered_items_count:
+                              type: integer
+                              example: 5
+                            orders_total_amount:
+                              type: string
+                              example: "1450.00"
+                  total_bookings:
+                    type: integer
+                    example: 10
+                  total_orders:
+                    type: integer
+                    example: 24
+                  total_ordered_items:
+                    type: integer
+                    example: 61
+                  lounge_id:
+                    type: string
+                    format: uuid
+                  limit:
+                    type: integer
+                    example: 50
+                  offset:
+                    type: integer
+                    example: 0
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -7239,6 +7601,8 @@ paths:
       description: |
         Get all food/beverage orders associated with a lounge booking.
 
+        Accessible by booking passenger, lounge owner, or approved lounge staff for the same lounge.
+
         **Use case:** View all orders placed during a lounge visit.
       operationId: getBookingOrders
       tags:
@@ -7253,6 +7617,13 @@ paths:
           schema:
             type: string
             format: uuid
+        - name: date
+          in: query
+          required: false
+          description: Filter orders by order creation date (YYYY-MM-DD)
+          schema:
+            type: string
+            format: date
       responses:
         "200":
           description: Orders retrieved successfully
@@ -7261,17 +7632,93 @@ paths:
               schema:
                 type: object
                 properties:
+                  booking:
+                    $ref: "#/components/schemas/LoungeBooking"
                   orders:
                     type: array
                     items:
                       $ref: "#/components/schemas/LoungeOrder"
-                  total:
+                  orders_count:
                     type: integer
                     example: 3
-                  total_amount:
+                  ordered_items_count:
+                    type: integer
+                    example: 7
+                  orders_total_amount:
                     type: string
                     example: "1250.00"
                     description: Total amount of all orders in LKR
+                  date:
+                    type: string
+                    format: date
+                    nullable: true
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/v1/lounge-bookings/{id}/with-orders:
+    get:
+      summary: Get booking with ordered items
+      description: |
+        Retrieve one lounge booking and all associated in-lounge orders.
+
+        If no orders exist for the booking, `orders` is returned as an empty array.
+
+        Accessible by booking passenger, lounge owner, or approved lounge staff for the same lounge.
+      operationId: getLoungeBookingWithOrders
+      tags:
+        - Lounge Bookings
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: date
+          in: query
+          required: false
+          description: Filter orders by order creation date (YYYY-MM-DD)
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: Booking with orders retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  booking:
+                    $ref: "#/components/schemas/LoungeBooking"
+                  orders:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/LoungeOrder"
+                  booking_id:
+                    type: string
+                    format: uuid
+                  orders_count:
+                    type: integer
+                    example: 2
+                  ordered_items_count:
+                    type: integer
+                    example: 4
+                  orders_total_amount:
+                    type: string
+                    example: "900.00"
+                  date:
+                    type: string
+                    format: date
+                    nullable: true
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -7367,6 +7814,369 @@ paths:
                     example: "Order status updated successfully"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  # ============================================================================
+  # Lounge Booking Driver Assignments
+  # ============================================================================
+  /api/v1/lounge-booking-driver-assignments:
+    post:
+      summary: Create driver assignment for booking
+      description: |
+        Assign a driver to a lounge booking for guest transportation.
+        Requires lounge owner authentication.
+      operationId: createLoungeBookingDriverAssignment
+      tags:
+        - Lounge Driver Assignments
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateLoungeBookingDriverAssignmentRequest"
+      responses:
+        "201":
+          description: Driver assignment created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Driver assignment created successfully"
+                  assignment:
+                    $ref: "#/components/schemas/LoungeBookingDriverAssignment"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/v1/lounge-booking-driver-assignments/{id}:
+    get:
+      summary: Get driver assignment by ID
+      description: Retrieve a specific driver assignment.
+      operationId: getLoungeBookingDriverAssignment
+      tags:
+        - Lounge Driver Assignments
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Assignment retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoungeBookingDriverAssignment"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+    put:
+      summary: Update driver assignment
+      description: |
+        Update a driver assignment (e.g., change status, update contact info).
+        Requires lounge owner authentication.
+      operationId: updateLoungeBookingDriverAssignment
+      tags:
+        - Lounge Driver Assignments
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateLoungeBookingDriverAssignmentRequest"
+      responses:
+        "200":
+          description: Assignment updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Assignment updated successfully"
+                  assignment_id:
+                    type: string
+                    format: uuid
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+    delete:
+      summary: Delete driver assignment
+      description: |
+        Delete a driver assignment.
+        Requires lounge owner authentication.
+      operationId: deleteLoungeBookingDriverAssignment
+      tags:
+        - Lounge Driver Assignments
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Assignment deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Assignment deleted successfully"
+                  assignment_id:
+                    type: string
+                    format: uuid
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/v1/lounge-booking-driver-assignments/{id}/cancel:
+    post:
+      summary: Cancel driver assignment
+      description: |
+        Cancel a driver assignment and update its status to 'cancelled'.
+        Requires lounge owner authentication.
+      operationId: cancelLoungeBookingDriverAssignment
+      tags:
+        - Lounge Driver Assignments
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Assignment cancelled successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Assignment cancelled successfully"
+                  assignment_id:
+                    type: string
+                    format: uuid
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/v1/lounge-bookings/{id}/driver-assignments:
+    get:
+      summary: Get driver assignments for booking
+      description: Retrieve all driver assignments for a specific booking.
+      operationId: getLoungeBookingDriverAssignmentsByBooking
+      tags:
+        - Lounge Driver Assignments
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Assignments retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  assignments:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/LoungeBookingDriverAssignment"
+                  total:
+                    type: integer
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/v1/drivers/{driver_id}/assignments:
+    get:
+      summary: Get all assignments for driver
+      description: |
+        Retrieve all driver assignments for a specific driver.
+        Can filter by status and use pagination.
+      operationId: getLoungeBookingDriverAssignmentsByDriver
+      tags:
+        - Lounge Driver Assignments
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: driver_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [pending, assigned, accepted, completed, cancelled]
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 50
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: Assignments retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  assignments:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/LoungeBookingDriverAssignment"
+                  limit:
+                    type: integer
+                  offset:
+                    type: integer
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/v1/lounges/{id}/driver-assignments:
+    get:
+      summary: Get driver assignments for lounge
+      description: |
+        Retrieve all driver assignments for a lounge (owner only).
+        Can filter by status and use pagination.
+      operationId: getLoungeBookingDriverAssignmentsByLounge
+      tags:
+        - Lounge Driver Assignments
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [pending, assigned, accepted, completed, cancelled]
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 50
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: Assignments retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  assignments:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/LoungeBookingDriverAssignment"
+                  lounge_id:
+                    type: string
+                    format: uuid
+                  limit:
+                    type: integer
+                  offset:
+                    type: integer
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -13924,6 +14734,63 @@ components:
           format: date-time
           nullable: true
 
+    LoungeBookingListItem:
+      type: object
+      description: Summary lounge booking for list views
+      properties:
+        id:
+          type: string
+          format: uuid
+        booking_reference:
+          type: string
+          example: "LNG-abc123"
+        lounge_id:
+          type: string
+          format: uuid
+        lounge_name:
+          type: string
+          example: "City Central Lounge"
+        booking_type:
+          type: string
+          enum: [pre_trip, post_trip, standalone]
+          example: "standalone"
+        scheduled_arrival:
+          type: string
+          format: date-time
+        number_of_guests:
+          type: integer
+          example: 2
+        primary_guest_name:
+          type: string
+          example: "John Doe"
+        primary_guest_phone:
+          type: string
+          example: "+94771234567"
+        total_amount:
+          type: string
+          example: "900.00"
+        status:
+          type: string
+          enum:
+            [
+              pending,
+              confirmed,
+              checked_in,
+              in_lounge,
+              checked_out,
+              completed,
+              cancelled,
+              no_show,
+            ]
+          example: "confirmed"
+        payment_status:
+          type: string
+          enum: [pending, paid, partial, collect_on_site, failed, refunded]
+          example: "pending"
+        created_at:
+          type: string
+          format: date-time
+
     LoungeBookingDetail:
       type: object
       description: Detailed lounge booking with guests and pre-orders
@@ -14619,6 +15486,110 @@ components:
           type: string
           enum:
             [held, payment_pending, confirming, confirmed, expired, cancelled]
+
+    # ==========================================================================
+    # LOUNGE BOOKING DRIVER ASSIGNMENT SCHEMAS
+    # ==========================================================================
+    LoungeBookingDriverAssignment:
+      type: object
+      description: Driver assignment for a lounge booking
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique assignment identifier
+        lounge_id:
+          type: string
+          format: uuid
+          description: Lounge ID
+        driver_id:
+          type: string
+          format: uuid
+          description: Driver ID
+        lounge_booking_id:
+          type: string
+          format: uuid
+          description: Lounge booking ID
+        guest_name:
+          type: string
+          example: "John Silva"
+          description: Name of the guest
+        guest_contact:
+          type: string
+          example: "+94771234567"
+          description: Guest's phone number
+        driver_contact:
+          type: string
+          example: "+94771230001"
+          description: Driver's phone number
+        status:
+          type: string
+          enum: [pending, assigned, accepted, completed, cancelled]
+          example: "pending"
+          description: Assignment status
+        created_at:
+          type: string
+          format: date-time
+          description: When the assignment was created
+        updated_at:
+          type: string
+          format: date-time
+          description: When the assignment was last updated
+
+    CreateLoungeBookingDriverAssignmentRequest:
+      type: object
+      required:
+        - lounge_id
+        - driver_id
+        - lounge_booking_id
+        - guest_name
+        - guest_contact
+        - driver_contact
+      properties:
+        lounge_id:
+          type: string
+          format: uuid
+          description: Lounge ID
+        driver_id:
+          type: string
+          format: uuid
+          description: Driver ID to assign
+        lounge_booking_id:
+          type: string
+          format: uuid
+          description: Booking ID to assign driver to
+        guest_name:
+          type: string
+          example: "John Silva"
+          description: Guest's name
+        guest_contact:
+          type: string
+          example: "+94771234567"
+          description: Guest's phone number
+        driver_contact:
+          type: string
+          example: "+94771230001"
+          description: Driver's phone number
+
+    UpdateLoungeBookingDriverAssignmentRequest:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [pending, assigned, accepted, completed, cancelled]
+          description: New assignment status
+        guest_name:
+          type: string
+          example: "John Silva"
+          description: Updated guest name
+        guest_contact:
+          type: string
+          example: "+94771234567"
+          description: Updated guest contact
+        driver_contact:
+          type: string
+          example: "+94771230001"
+          description: Updated driver contact
         bus_fare:
           type: number
           format: double

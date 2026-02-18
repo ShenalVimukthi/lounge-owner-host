@@ -265,16 +265,27 @@ func main() {
 	loungeOwnerHandler := handlers.NewLoungeOwnerHandler(loungeOwnerRepository, userRepository, loungeRepository) //added lounge repository new
 	loungeRouteRepository := database.NewLoungeRouteRepository(sqlxDB.DB)
 	loungeHandler := handlers.NewLoungeHandler(loungeRepository, loungeOwnerRepository, loungeRouteRepository)
-	loungeStaffHandler := handlers.NewLoungeStaffHandler(loungeStaffRepository, loungeRepository, loungeOwnerRepository, userRepository, phoneValidator, loungeStaffRepository, bookingRepository)
+	
+	// Initialize lounge booking system first before staff handler
+	logger.Info("🏨 Initializing lounge booking system...")
+	loungeBookingRepo := database.NewLoungeBookingRepository(sqlxDB.DB)
+	logger.Info("✓ Lounge booking system initialized")
+	
+	loungeStaffHandler := handlers.NewLoungeStaffHandler(loungeStaffRepository, loungeRepository, loungeOwnerRepository, userRepository, phoneValidator, loungeStaffRepository, bookingRepository, loungeBookingRepo)
 	loungeDriverHandler := handlers.NewLoungeDriverHandler(loungeOwnerRepository, loungeRepository, loungeDriverRepository)
 	loungeTransportLocationHandler := handlers.NewLoungeTransportLocationHandler(loungeOwnerRepository, loungeRepository, loungeTransportLocationRepository)
 	loungeTransportLocationPriceHandler := handlers.NewLoungeTransportLocationPriceHandler(loungeOwnerRepository, loungeRepository, loungeTransportLocationRepository, loungeTransportLocationPriceRepository)
 
-	// Initialize lounge booking system
-	logger.Info("🏨 Initializing lounge booking system...")
-	loungeBookingRepo := database.NewLoungeBookingRepository(sqlxDB.DB)
+	// Initialize lounge booking handler
+	logger.Info("🏨 Initializing lounge booking handler...")
 	loungeBookingHandler := handlers.NewLoungeBookingHandler(loungeBookingRepo, loungeRepository, loungeOwnerRepository, loungeStaffRepository)
-	logger.Info("✓ Lounge booking system initialized")
+	logger.Info("✓ Lounge booking handler initialized")
+
+	// Initialize Lounge Booking Driver Assignment system
+	logger.Info("Initializing lounge booking driver assignment system...")
+	loungeBookingDriverAssignmentRepo := database.NewLoungeBookingDriverAssignmentRepository(sqlxDB.DB)
+	loungeBookingDriverAssignmentHandler := handlers.NewLoungeBookingDriverAssignmentHandler(loungeBookingDriverAssignmentRepo, loungeOwnerRepository, loungeRepository)
+	logger.Info("✓ Lounge booking driver assignment system initialized")
 
 	logger.Info("🔍 DEBUG: Lounge handlers initialized successfully")
 	adminHandler := handlers.NewAdminHandler(loungeOwnerRepository, loungeRepository, userRepository)
@@ -671,6 +682,12 @@ func main() {
 			// Profile endpoints
 			logger.Info("  ✅ GET /api/v1/lounge-staff/profile")
 			loungeStaff.GET("/profile", loungeStaffHandler.GetProfile)
+			
+			// Booking endpoints
+			logger.Info("  ✅ GET /api/v1/lounge-staff/bookings")
+			loungeStaff.GET("/bookings", loungeStaffHandler.GetLoungeBookingsForStaff)
+			logger.Info("  ✅ GET /api/v1/lounge-staff/bookings/reference/:reference")
+			loungeStaff.GET("/bookings/reference/:reference", loungeStaffHandler.GetBookingByReference)
 		}
 		logger.Info("🏨 Lounge Staff routes registered successfully")
 
@@ -782,6 +799,8 @@ func main() {
 			// Bookings for a lounge (owner/staff view - read-only, no approval needed)
 			logger.Info("  ✅ GET /api/v1/lounges/:id/bookings (owner/staff, read-only)")
 			loungesProtectedProducts.GET("/:id/bookings", loungeBookingHandler.GetLoungeBookingsForOwner)
+			logger.Info("  ✅ GET /api/v1/lounges/:id/bookings-with-orders (owner/staff, read-only)")
+			loungesProtectedProducts.GET("/:id/bookings-with-orders", loungeBookingHandler.GetLoungeBookingsWithOrdersForOwner)
 			logger.Info("  ✅ GET /api/v1/lounges/:id/bookings/today (owner/staff, read-only)")
 			loungesProtectedProducts.GET("/:id/bookings/today", loungeBookingHandler.GetTodaysBookings)
 
@@ -813,6 +832,8 @@ func main() {
 			// Orders for a booking
 			logger.Info("  ✅ GET /api/v1/lounge-bookings/:id/orders - Get booking orders")
 			loungeBookings.GET("/:id/orders", loungeBookingHandler.GetBookingOrders)
+			logger.Info("  ✅ GET /api/v1/lounge-bookings/:id/with-orders - Get booking with orders")
+			loungeBookings.GET("/:id/with-orders", loungeBookingHandler.GetLoungeBookingWithOrders)
 		}
 
 		// Lounge Orders - In-lounge ordering
@@ -825,6 +846,40 @@ func main() {
 			loungeOrders.PUT("/:id/status", loungeBookingHandler.UpdateOrderStatus)
 		}
 		logger.Info("🏨 Lounge Booking routes registered successfully")
+
+		// Lounge Booking Driver Assignments
+		logger.Info("Registering Lounge Booking Driver Assignment routes...")
+		driverAssignments := v1.Group("/lounge-booking-driver-assignments")
+		driverAssignments.Use(middleware.AuthMiddleware(jwtService))
+		{
+			logger.Info("  ✅ POST /api/v1/lounge-booking-driver-assignments - Create assignment")
+			driverAssignments.POST("", loungeBookingDriverAssignmentHandler.CreateAssignment)
+			logger.Info("  ✅ GET /api/v1/lounge-booking-driver-assignments/:id - Get assignment by ID")
+			driverAssignments.GET("/:id", loungeBookingDriverAssignmentHandler.GetAssignmentByID)
+			logger.Info("  ✅ PUT /api/v1/lounge-booking-driver-assignments/:id - Update assignment")
+			driverAssignments.PUT("/:id", loungeBookingDriverAssignmentHandler.UpdateAssignment)
+			logger.Info("  ✅ DELETE /api/v1/lounge-booking-driver-assignments/:id - Delete assignment")
+			driverAssignments.DELETE("/:id", loungeBookingDriverAssignmentHandler.DeleteAssignment)
+			logger.Info("  ✅ POST /api/v1/lounge-booking-driver-assignments/:id/cancel - Cancel assignment")
+			driverAssignments.POST("/:id/cancel", loungeBookingDriverAssignmentHandler.CancelAssignment)
+		}
+
+		// Assignments by booking
+		logger.Info("  ✅ GET /api/v1/lounge-bookings/:id/driver-assignments - Get assignments for booking")
+		v1.GET("/lounge-bookings/:id/driver-assignments", loungeBookingDriverAssignmentHandler.GetAssignmentsByBooking)
+
+		// Assignments by driver
+		logger.Info("  ✅ GET /api/v1/drivers/:driver_id/assignments - Get assignments for driver")
+		v1.GET("/drivers/:driver_id/assignments", loungeBookingDriverAssignmentHandler.GetAssignmentsByDriver)
+
+		// Assignments by lounge (protected)
+		loungeAssignments := v1.Group("/lounges")
+		loungeAssignments.Use(middleware.AuthMiddleware(jwtService))
+		{
+			logger.Info("  ✅ GET /api/v1/lounges/:id/driver-assignments - Get assignments for lounge")
+			loungeAssignments.GET("/:id/driver-assignments", loungeBookingDriverAssignmentHandler.GetAssignmentsByLounge)
+		}
+		logger.Info("🚗 Lounge Booking Driver Assignment routes registered successfully")
 
 		// Staff profile routes (for lounge staff members)
 		logger.Info("👤 Registering Staff profile routes...")
