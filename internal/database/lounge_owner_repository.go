@@ -3,6 +3,7 @@ package database
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -468,4 +469,86 @@ func (r *LoungeOwnerRepository) GetApprovedLoungeOwnersByDistrict()(map[string][
 	}
 
 	return districtGroups, nil
+}
+
+// UpdateProfile updates lounge owner profile with optional fields
+func (r *LoungeOwnerRepository) UpdateProfile(
+	userID uuid.UUID,
+	businessName *string,
+	businessLicense *string,
+	managerFullName *string,
+	managerNICNumber *string,
+	managerEmail *string,
+	district *string,
+) error {
+	// Build dynamic UPDATE query with only provided fields
+	var updates []string
+	var args []interface{}
+	argIndex := 1
+
+	if businessName != nil {
+		updates = append(updates, fmt.Sprintf("business_name = $%d", argIndex))
+		args = append(args, *businessName)
+		argIndex++
+	}
+
+	if businessLicense != nil {
+		updates = append(updates, fmt.Sprintf("business_license = $%d", argIndex))
+		args = append(args, *businessLicense)
+		argIndex++
+	}
+
+	if managerFullName != nil {
+		updates = append(updates, fmt.Sprintf("manager_full_name = $%d", argIndex))
+		args = append(args, *managerFullName)
+		argIndex++
+	}
+
+	if managerNICNumber != nil {
+		updates = append(updates, fmt.Sprintf("manager_nic_number = $%d", argIndex))
+		args = append(args, *managerNICNumber)
+		argIndex++
+	}
+
+	if managerEmail != nil {
+		updates = append(updates, fmt.Sprintf("manager_email = $%d", argIndex))
+		args = append(args, *managerEmail)
+		argIndex++
+	}
+
+	if district != nil {
+		updates = append(updates, fmt.Sprintf("district = $%d", argIndex))
+		args = append(args, *district)
+		argIndex++
+	}
+
+	// Always update updated_at
+	updates = append(updates, fmt.Sprintf("updated_at = $%d", argIndex))
+	args = append(args, time.Now())
+	argIndex++
+
+	// Add user_id as WHERE clause
+	args = append(args, userID)
+
+	query := fmt.Sprintf(
+		"UPDATE lounge_owners SET %s WHERE user_id = $%d",
+		strings.Join(updates, ", "),
+		argIndex,
+	)
+
+	result, err := r.db.Exec(query, args...)
+	if err != nil {
+		return fmt.Errorf("failed to update lounge owner profile: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("no lounge owner found with user_id %s", userID)
+	}
+
+	return nil
 }

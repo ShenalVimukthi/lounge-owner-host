@@ -1181,10 +1181,122 @@ func (h *LoungeStaffHandler) GetLoungeBookingsForStaff(c *gin.Context) {
 	})
 }
 
-// func getStringFromNullString(ns sql.NullString) *string {
-//     if ns.Valid {
-//         return &ns.String
-//     }
+// ===================================================================
+// UPDATE LOUNGE STAFF PROFILE
+// ===================================================================
+
+// UpdateLoungeStaffProfileRequest represents the profile update request
+type UpdateLoungeStaffProfileRequest struct {
+	FullName  *string `json:"full_name"`
+	NICNumber *string `json:"nic_number"`
+	Email     *string `json:"email"`
+	Notes     *string `json:"notes"`
+}
+
+// UpdateProfile handles PUT /api/v1/lounge-staff/profile
+func (h *LoungeStaffHandler) UpdateProfile(c *gin.Context) {
+	// Get user context from JWT middleware
+	userCtx, exists := middleware.GetUserContext(c)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{
+			Error:   "unauthorized",
+			Message: "User context not found",
+		})
+		return
+	}
+
+	var req UpdateLoungeStaffProfileRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Error:   "validation_error",
+			Message: "Invalid request body: " + err.Error(),
+		})
+		return
+	}
+
+	// Get lounge staff record for this user
+	staff, err := h.staffRepo.GetStaffByUserID(userCtx.UserID)
+	if err != nil {
+		log.Printf("ERROR: Failed to get lounge staff for user %s: %v", userCtx.UserID, err)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Error:   "database_error",
+			Message: "Failed to retrieve profile",
+		})
+		return
+	}
+
+	if staff == nil {
+		c.JSON(http.StatusNotFound, ErrorResponse{
+			Error:   "not_found",
+			Message: "Lounge staff profile not found",
+		})
+		return
+	}
+
+	// Update profile with provided fields
+	err = h.staffRepo.UpdateProfile(
+		userCtx.UserID,
+		req.FullName,
+		req.NICNumber,
+		req.Email,
+		req.Notes,
+	)
+	if err != nil {
+		log.Printf("ERROR: Failed to update profile for staff %s: %v", userCtx.UserID, err)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Error:   "update_failed",
+			Message: "Failed to update lounge staff profile",
+		})
+		return
+	}
+
+	// Fetch updated profile
+	updatedStaff, err := h.staffRepo.GetStaffByUserID(userCtx.UserID)
+	if err != nil {
+		log.Printf("ERROR: Failed to fetch updated profile for staff %s: %v", userCtx.UserID, err)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Error:   "database_error",
+			Message: "Failed to retrieve updated profile",
+		})
+		return
+	}
+
+	// Helper function to extract values from sql.NullString
+	getNullableString := func(ns sql.NullString) interface{} {
+		if ns.Valid {
+			return ns.String
+		}
+		return nil
+	}
+
+	// Helper function to extract values from sql.NullTime
+	getNullableTime := func(nt sql.NullTime) interface{} {
+		if nt.Valid {
+			return nt.Time
+		}
+		return nil
+	}
+
+	log.Printf("INFO: Profile updated for lounge staff %s", userCtx.UserID)
+
+	c.JSON(http.StatusOK, gin.H{
+		"id":                 updatedStaff.ID,
+		"lounge_id":          updatedStaff.LoungeID,
+		"user_id":            updatedStaff.UserID,
+		"full_name":          getNullableString(updatedStaff.FullName),
+		"nic_number":         getNullableString(updatedStaff.NICNumber),
+		"email":              getNullableString(updatedStaff.Email),
+		"profile_completed":  updatedStaff.ProfileCompleted,
+		"approval_status":    updatedStaff.ApprovalStatus,
+		"employment_status":  updatedStaff.EmploymentStatus,
+		"hired_date":         getNullableTime(updatedStaff.HiredDate),
+		"terminated_date":    getNullableTime(updatedStaff.TerminatedDate),
+		"notes":              getNullableString(updatedStaff.Notes),
+		"created_at":         updatedStaff.CreatedAt,
+		"updated_at":         updatedStaff.UpdatedAt,
+	})
+}
+
 //     return nil
 // }
 

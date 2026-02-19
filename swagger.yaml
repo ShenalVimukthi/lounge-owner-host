@@ -4825,6 +4825,167 @@ paths:
         "500":
           $ref: "#/components/responses/InternalServerError"
 
+  /api/v1/lounge-owner/profile/update:
+    put:
+      summary: Update lounge owner profile
+      description: |
+        Update lounge owner profile information. Only authenticated lounge owners can update their own profile.
+        All fields are optional - only provide fields that need to be updated.
+      operationId: updateLoungeOwnerProfile
+      tags:
+        - Lounge Owner
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                business_name:
+                  type: string
+                  nullable: true
+                  example: "Grand Hotel Colombo"
+                business_license:
+                  type: string
+                  nullable: true
+                  example: "BR2024123456"
+                manager_full_name:
+                  type: string
+                  nullable: true
+                  example: "John Doe"
+                manager_nic_number:
+                  type: string
+                  nullable: true
+                  example: "200012345678"
+                manager_email:
+                  type: string
+                  nullable: true
+                  format: email
+                  example: "manager@grandhotel.com"
+                district:
+                  type: string
+                  nullable: true
+                  example: "Colombo"
+      responses:
+        "200":
+          description: Profile updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                    example: "d581c281-ba77-49d2-8f68-5f7377417bf8"
+                  user_id:
+                    type: string
+                    format: uuid
+                    example: "3edeb9af-51c3-4c24-a5d0-76c9dee2d4ea"
+                  business_name:
+                    type: string
+                    nullable: true
+                    example: "Grand Hotel Colombo"
+                  business_license:
+                    type: string
+                    nullable: true
+                    example: "BR2024123456"
+                  manager_full_name:
+                    type: string
+                    nullable: true
+                    example: "John Doe"
+                  manager_nic_number:
+                    type: string
+                    nullable: true
+                    example: "200012345678"
+                  manager_email:
+                    type: string
+                    nullable: true
+                    example: "manager@grandhotel.com"
+                  district:
+                    type: string
+                    nullable: true
+                    example: "Colombo"
+                  registration_step:
+                    type: string
+                    enum:
+                      [
+                        "phone_verified",
+                        "business_info",
+                        "lounge_added",
+                        "completed",
+                      ]
+                    example: "completed"
+                  profile_completed:
+                    type: boolean
+                    example: true
+                  verification_status:
+                    type: string
+                    enum: ["pending", "approved", "rejected"]
+                    example: "pending"
+                  verification_notes:
+                    type: string
+                    nullable: true
+                    example: "Pending document verification"
+                  verified_at:
+                    type: string
+                    format: date-time
+                    nullable: true
+                    example: "2025-10-19T12:00:00Z"
+                  created_at:
+                    type: string
+                    format: date-time
+                    example: "2025-10-19T10:30:00Z"
+                  updated_at:
+                    type: string
+                    format: date-time
+                    example: "2025-10-19T11:00:00Z"
+        "400":
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "validation_error"
+                  message:
+                    type: string
+                    example: "Invalid request body: unsupported type"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Lounge owner profile not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "not_found"
+                  message:
+                    type: string
+                    example: "Lounge owner profile not found"
+        "409":
+          description: Conflict - Business license already registered
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "duplicate_business_license"
+                  message:
+                    type: string
+                    example: "This business license number is already registered. Please use a different license number."
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
   # ============================================================================
   # Lounge Management Endpoints
   # ============================================================================
@@ -5849,6 +6010,130 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/v1/lounge-staff/profile/update:
+    put:
+      summary: Update lounge staff profile
+      description: |
+        Update lounge staff profile information. Only authenticated lounge staff can update their own profile.
+        All fields are optional - only provide fields that need to be updated.
+      operationId: updateLoungeStaffProfile
+      tags:
+        - Lounge Staff
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                full_name:
+                  type: string
+                  nullable: true
+                  example: "John Doe"
+                nic_number:
+                  type: string
+                  nullable: true
+                  example: "200012345678"
+                email:
+                  type: string
+                  nullable: true
+                  format: email
+                  example: "john@example.com"
+                notes:
+                  type: string
+                  nullable: true
+                  example: "Night shift preferred"
+      responses:
+        "200":
+          description: Profile updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  lounge_id:
+                    type: string
+                    format: uuid
+                  user_id:
+                    type: string
+                    format: uuid
+                  full_name:
+                    type: string
+                    nullable: true
+                    example: "John Doe"
+                  nic_number:
+                    type: string
+                    nullable: true
+                    example: "200012345678"
+                  email:
+                    type: string
+                    nullable: true
+                    example: "john@example.com"
+                  profile_completed:
+                    type: boolean
+                    example: true
+                  approval_status:
+                    type: string
+                    enum: [pending, approved, declined]
+                    example: "approved"
+                  employment_status:
+                    type: string
+                    enum: [active, terminated, suspended, pending]
+                    example: "active"
+                  hired_date:
+                    type: string
+                    format: date-time
+                    nullable: true
+                  terminated_date:
+                    type: string
+                    format: date-time
+                    nullable: true
+                  notes:
+                    type: string
+                    nullable: true
+                    example: "Night shift preferred"
+                  created_at:
+                    type: string
+                    format: date-time
+                  updated_at:
+                    type: string
+                    format: date-time
+        "400":
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "validation_error"
+                  message:
+                    type: string
+                    example: "Invalid request body: unsupported type"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Lounge staff profile not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "not_found"
+                  message:
+                    type: string
+                    example: "Lounge staff profile not found"
         "500":
           $ref: "#/components/responses/InternalServerError"
 

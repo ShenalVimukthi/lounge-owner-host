@@ -475,3 +475,135 @@ func (h *LoungeOwnerHandler) GetApprovedLoungeOwnersByDsitrict(c *gin.Context) {
 	})
 
 }
+
+// ===================================================================
+// UPDATE LOUNGE OWNER PROFILE
+// ===================================================================
+
+// UpdateLoungeOwnerProfileRequest represents the profile update request
+type UpdateLoungeOwnerProfileRequest struct {
+	BusinessName     *string `json:"business_name"`
+	BusinessLicense  *string `json:"business_license"`
+	ManagerFullName  *string `json:"manager_full_name"`
+	ManagerNICNumber *string `json:"manager_nic_number"`
+	ManagerEmail     *string `json:"manager_email"`
+	District         *string `json:"district"`
+}
+
+// UpdateProfile handles PUT /api/v1/lounge-owner/profile
+func (h *LoungeOwnerHandler) UpdateProfile(c *gin.Context) {
+	// Get user context from JWT middleware
+	userCtx, exists := middleware.GetUserContext(c)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{
+			Error:   "unauthorized",
+			Message: "User context not found",
+		})
+		return
+	}
+
+	var req UpdateLoungeOwnerProfileRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Error:   "validation_error",
+			Message: "Invalid request body: " + err.Error(),
+		})
+		return
+	}
+
+	// Get lounge owner record
+	owner, err := h.loungeOwnerRepo.GetLoungeOwnerByUserID(userCtx.UserID)
+	if err != nil {
+		log.Printf("ERROR: Failed to get lounge owner for user %s: %v", userCtx.UserID, err)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Error:   "database_error",
+			Message: "Failed to retrieve lounge owner",
+		})
+		return
+	}
+
+	if owner == nil {
+		c.JSON(http.StatusNotFound, ErrorResponse{
+			Error:   "not_found",
+			Message: "Lounge owner profile not found",
+		})
+		return
+	}
+
+	// Update profile with provided fields
+	err = h.loungeOwnerRepo.UpdateProfile(
+		userCtx.UserID,
+		req.BusinessName,
+		req.BusinessLicense,
+		req.ManagerFullName,
+		req.ManagerNICNumber,
+		req.ManagerEmail,
+		req.District,
+	)
+	if err != nil {
+		log.Printf("ERROR: Failed to update profile for user %s: %v", userCtx.UserID, err)
+
+		// Check if it's a duplicate key error
+		errMsg := err.Error()
+		if strings.Contains(errMsg, "duplicate key") && strings.Contains(errMsg, "business_license") {
+			c.JSON(http.StatusConflict, ErrorResponse{
+				Error:   "duplicate_business_license",
+				Message: "This business license number is already registered. Please use a different license number.",
+			})
+			return
+		}
+
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Error:   "update_failed",
+			Message: "Failed to update lounge owner profile",
+		})
+		return
+	}
+
+	// Fetch updated profile
+	updatedOwner, err := h.loungeOwnerRepo.GetLoungeOwnerByUserID(userCtx.UserID)
+	if err != nil {
+		log.Printf("ERROR: Failed to fetch updated profile for user %s: %v", userCtx.UserID, err)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Error:   "database_error",
+			Message: "Failed to retrieve updated profile",
+		})
+		return
+	}
+
+	// Helper function to extract values from sql.NullString
+	getNullableString := func(ns sql.NullString) interface{} {
+		if ns.Valid {
+			return ns.String
+		}
+		return nil
+	}
+
+	// Helper function to extract values from sql.NullTime
+	getNullableTime := func(nt sql.NullTime) interface{} {
+		if nt.Valid {
+			return nt.Time
+		}
+		return nil
+	}
+
+	log.Printf("INFO: Profile updated for lounge owner %s", userCtx.UserID)
+
+	c.JSON(http.StatusOK, gin.H{
+		"id":                  updatedOwner.ID,
+		"user_id":             updatedOwner.UserID,
+		"business_name":       getNullableString(updatedOwner.BusinessName),
+		"business_license":    getNullableString(updatedOwner.BusinessLicense),
+		"manager_full_name":   getNullableString(updatedOwner.ManagerFullName),
+		"manager_nic_number":  getNullableString(updatedOwner.ManagerNICNumber),
+		"manager_email":       getNullableString(updatedOwner.ManagerEmail),
+		"district":            getNullableString(updatedOwner.District),
+		"registration_step":   updatedOwner.RegistrationStep,
+		"profile_completed":   updatedOwner.ProfileCompleted,
+		"verification_status": updatedOwner.VerificationStatus,
+		"verification_notes":  getNullableString(updatedOwner.VerificationNotes),
+		"verified_at":         getNullableTime(updatedOwner.VerifiedAt),
+		"created_at":          updatedOwner.CreatedAt,
+		"updated_at":          updatedOwner.UpdatedAt,
+	})
+}

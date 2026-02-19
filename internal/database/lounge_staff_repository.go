@@ -472,3 +472,80 @@ func (r *LoungeStaffRepository) GetApprovedStaffaByUserID(userID uuid.UUID)(*mod
 
 	return &staff, nil
 }
+
+// UpdateProfile updates lounge staff profile with optional fields
+func (r *LoungeStaffRepository) UpdateProfile(
+	userID uuid.UUID,
+	fullName *string,
+	nicNumber *string,
+	email *string,
+	notes *string,
+) error {
+	// Build dynamic UPDATE query with only provided fields
+	var updates []string
+	var args []interface{}
+	argIndex := 1
+
+	if fullName != nil {
+		updates = append(updates, fmt.Sprintf("full_name = $%d", argIndex))
+		args = append(args, *fullName)
+		argIndex++
+	}
+
+	if nicNumber != nil {
+		updates = append(updates, fmt.Sprintf("nic_number = $%d", argIndex))
+		args = append(args, *nicNumber)
+		argIndex++
+	}
+
+	if email != nil {
+		updates = append(updates, fmt.Sprintf("email = $%d", argIndex))
+		args = append(args, *email)
+		argIndex++
+	}
+
+	if notes != nil {
+		updates = append(updates, fmt.Sprintf("notes = $%d", argIndex))
+		args = append(args, *notes)
+		argIndex++
+	}
+
+	// Always update updated_at
+	updates = append(updates, fmt.Sprintf("updated_at = $%d", argIndex))
+	args = append(args, time.Now())
+	argIndex++
+
+	// Add user_id as WHERE clause
+	args = append(args, userID)
+
+	// Build the update string
+	var updateStr string
+	for i, u := range updates {
+		if i > 0 {
+			updateStr += ", "
+		}
+		updateStr += u
+	}
+
+	query := fmt.Sprintf(
+		"UPDATE lounge_staff SET %s WHERE user_id = $%d",
+		updateStr,
+		argIndex,
+	)
+
+	result, err := r.db.Exec(query, args...)
+	if err != nil {
+		return fmt.Errorf("failed to update lounge staff profile: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("no lounge staff found with user_id %s", userID)
+	}
+
+	return nil
+}

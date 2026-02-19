@@ -669,6 +669,8 @@ func main() {
 				// Profile endpoints
 				logger.Info("  ✅ GET /api/v1/lounge-owner/profile")
 				loungeOwner.GET("/profile", loungeOwnerHandler.GetProfile)
+				logger.Info("  ✅ PUT /api/v1/lounge-owner/profile/update")
+				loungeOwner.PUT("/profile/update", loungeOwnerHandler.UpdateProfile)
 			}
 
 		}
@@ -682,6 +684,8 @@ func main() {
 			// Profile endpoints
 			logger.Info("  ✅ GET /api/v1/lounge-staff/profile")
 			loungeStaff.GET("/profile", loungeStaffHandler.GetProfile)
+			logger.Info("  ✅ PUT /api/v1/lounge-staff/profile/update")
+			loungeStaff.PUT("/profile/update", loungeStaffHandler.UpdateProfile)
 			
 			// Booking endpoints
 			logger.Info("  ✅ GET /api/v1/lounge-staff/bookings")
