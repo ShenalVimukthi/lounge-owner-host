@@ -1088,9 +1088,203 @@ func (h *LoungeBookingHandler) GetLoungeBookingByReference(c *gin.Context) {
 	c.JSON(http.StatusOK, booking)
 }
 
+// GetLoungeBookingByQRCode handles GET /api/v1/lounge-bookings/qr/:qr_code_data
+func (h *LoungeBookingHandler) GetLoungeBookingByQRCode(c *gin.Context) {
+	userCtx, exists := middleware.GetUserContext(c)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{
+			Error:   "unauthorized",
+			Message: "User context not found",
+		})
+		return
+	}
+
+	qrCodeData := c.Param("qr_code_data")
+	if qrCodeData == "" {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Error:   "validation_error",
+			Message: "QR code data is required",
+		})
+		return
+	}
+
+	booking, err := h.bookingRepo.GetLoungeBookingByQRCode(qrCodeData)
+	if err != nil {
+		log.Printf("ERROR: Failed to get lounge booking by QR code: %v", err)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Error:   "database_error",
+			Message: "Failed to retrieve booking",
+		})
+		return
+	}
+
+	if booking == nil {
+		c.JSON(http.StatusNotFound, ErrorResponse{
+			Error:   "not_found",
+			Message: "Booking not found",
+		})
+		return
+	}
+
+	// Check ownership
+	if booking.UserID != userCtx.UserID {
+		owner, _ := h.loungeOwnerRepo.GetLoungeOwnerByUserID(userCtx.UserID)
+		lounge, _ := h.loungeRepo.GetLoungeByID(booking.LoungeID)
+
+		isOwner := owner != nil && lounge != nil && lounge.LoungeOwnerID == owner.ID
+
+		var isStaff bool
+		if !isOwner {
+			staff, _ := h.loungeStaffRepo.GetApprovedStaffaByUserID(userCtx.UserID)
+			if staff != nil && staff.LoungeID == booking.LoungeID {
+				isStaff = true
+			}
+		}
+
+		if !isOwner && !isStaff {
+			c.JSON(http.StatusForbidden, ErrorResponse{
+				Error:   "forbidden",
+				Message: "Not authorized to view this booking",
+			})
+			return
+		}
+	}
+
+	c.JSON(http.StatusOK, booking)
+}
+
 // CancelLoungeBookingRequest represents the cancellation request
 type CancelLoungeBookingRequest struct {
 	Reason string `json:"reason"`
+}
+
+// CheckInCheckOutRequest represents a check-in or check-out request with location
+type CheckInCheckOutRequest struct {
+	Latitude  *float64 `json:"latitude,omitempty" binding:"omitempty"`   // Optional location data
+	Longitude *float64 `json:"longitude,omitempty" binding:"omitempty"` // Optional location data
+	LocationName *string `json:"location_name,omitempty"`               // Optional human-readable location
+}
+
+// ToggleBookingCheckInOut handles POST /api/v1/lounge-bookings/:id/check-in-out
+// Toggles between checked_in and checked_out status, tracking the staff member who performed it
+// If booking is 'confirmed', moves to 'checked_in' (check-in)
+// If booking is 'checked_in', moves to 'checked_out' (check-out)
+func (h *LoungeBookingHandler) ToggleBookingCheckInOut(c *gin.Context) {
+	userCtx, exists := middleware.GetUserContext(c)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{
+			Error:   "unauthorized",
+			Message: "User context not found",
+		})
+		return
+	}
+
+	bookingIDStr := c.Param("id")
+	bookingID, err := uuid.Parse(bookingIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Error:   "invalid_format",
+			Message: "Invalid booking ID format",
+		})
+		return
+	}
+
+	var req CheckInCheckOutRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		// Allow empty request body (location data is optional)
+		_ = err
+	}
+
+	// Get current booking to verify permissions
+	booking, err := h.bookingRepo.GetLoungeBookingByID(bookingID)
+	if err != nil {
+		log.Printf("ERROR: Failed to get booking: %v", err)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Error:   "database_error",
+			Message: "Failed to retrieve booking",
+		})
+		return
+	}
+
+	if booking == nil {
+		c.JSON(http.StatusNotFound, ErrorResponse{
+			Error:   "not_found",
+			Message: "Booking not found",
+		})
+		return
+	}
+
+	// Authorization: lounge owner or approved lounge staff at this lounge
+	owner, _ := h.loungeOwnerRepo.GetLoungeOwnerByUserID(userCtx.UserID)
+	lounge, _ := h.loungeRepo.GetLoungeByID(booking.LoungeID)
+
+	isOwner := owner != nil && lounge != nil && lounge.LoungeOwnerID == owner.ID
+
+	var isStaff bool
+	if !isOwner {
+		staff, _ := h.loungeStaffRepo.GetApprovedStaffaByUserID(userCtx.UserID)
+		if staff != nil && staff.LoungeID == booking.LoungeID {
+			isStaff = true
+		}
+	}
+
+	if !isOwner && !isStaff {
+		c.JSON(http.StatusForbidden, ErrorResponse{
+			Error:   "forbidden",
+			Message: "Not authorized to manage this booking",
+		})
+		return
+	}
+
+	// Check if booking can be toggled (must be 'confirmed' or 'checked_in')
+	if booking.Status != "confirmed" && booking.Status != "checked_in" {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Error:   "invalid_status",
+			Message: "Booking must be in 'confirmed' or 'checked_in' status to toggle check-in/out",
+		})
+		return
+	}
+
+	// Toggle the booking status
+	updatedBooking, err := h.bookingRepo.ToggleBookingCheckInOut(bookingID, userCtx.UserID)
+	if err != nil {
+		log.Printf("ERROR: Failed to toggle check-in/out: %v", err)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Error:   "toggle_failed",
+			Message: "Failed to toggle check-in/out status",
+		})
+		return
+	}
+
+	// Build response with location data if provided
+	response := gin.H{
+		"message": "",
+		"booking": updatedBooking,
+	}
+
+	if updatedBooking.Status == models.LoungeBookingStatusCheckedIn {
+		response["message"] = "Guest checked in successfully"
+		if req.Latitude != nil && req.Longitude != nil {
+			response["check_in_location"] = gin.H{
+				"latitude":      *req.Latitude,
+				"longitude":     *req.Longitude,
+				"location_name": req.LocationName,
+				"checked_in_at": updatedBooking.ActualArrival,
+			}
+		}
+	} else if updatedBooking.Status == "checked_out" {
+		response["message"] = "Guest checked out successfully"
+		if req.Latitude != nil && req.Longitude != nil {
+			response["check_out_location"] = gin.H{
+				"latitude":       *req.Latitude,
+				"longitude":      *req.Longitude,
+				"location_name":  req.LocationName,
+				"checked_out_at": updatedBooking.ActualDeparture,
+			}
+		}
+	}
+
+	c.JSON(http.StatusOK, response)
 }
 
 // CancelLoungeBooking handles POST /api/v1/lounge-bookings/:id/cancel

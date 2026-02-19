@@ -233,6 +233,10 @@ type LoungeBooking struct {
 	ActualArrival      sql.NullTime `db:"actual_arrival" json:"actual_arrival,omitempty"`
 	ActualDeparture    sql.NullTime `db:"actual_departure" json:"actual_departure,omitempty"`
 
+	// Check-in/Check-out tracking
+	CheckedInByUserID  *uuid.UUID `db:"checked_in_by_user_id" json:"checked_in_by_user_id,omitempty"`
+	CheckedOutByUserID *uuid.UUID `db:"checked_out_by_user_id" json:"checked_out_by_user_id,omitempty"`
+
 	// Guests
 	NumberOfGuests int `db:"number_of_guests" json:"number_of_guests"`
 

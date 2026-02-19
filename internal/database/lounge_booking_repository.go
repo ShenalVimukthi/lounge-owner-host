@@ -411,7 +411,7 @@ func (r *LoungeBookingRepository) CreateLoungeBooking(
 	// Insert booking
 	bookingQuery := `
 		INSERT INTO lounge_bookings (
-			lounge_booking_id, booking_reference, user_id, lounge_id, master_booking_id, bus_booking_id,
+			id, booking_reference, user_id, lounge_id, master_booking_id, bus_booking_id,
 			booking_type, scheduled_arrival, scheduled_departure, 
 			number_of_guests, pricing_type, price_per_guest, base_price, pre_order_total, 
 			discount_amount, total_amount, status, payment_status,
@@ -488,13 +488,12 @@ func (r *LoungeBookingRepository) CreateLoungeBooking(
 	return booking, nil
 }
 
-// changed lb.id to lounge_booking_id
 // GetLoungeBookingByID returns a booking by ID with guests and pre-orders
 func (r *LoungeBookingRepository) GetLoungeBookingByID(bookingID uuid.UUID) (*models.LoungeBooking, error) {
 	var booking models.LoungeBooking
 	query := `
 		SELECT 
-			lb.lounge_booking_id, lb.booking_reference, lb.user_id, lb.lounge_id, lb.master_booking_id, lb.bus_booking_id,
+			lb.id, lb.booking_reference, lb.user_id, lb.lounge_id, lb.master_booking_id, lb.bus_booking_id,
 			lb.booking_type, lb.scheduled_arrival, lb.scheduled_departure, lb.actual_arrival, lb.actual_departure,
 			lb.number_of_guests, lb.pricing_type, lb.base_price, lb.pre_order_total,
 			lb.discount_amount, lb.total_amount, lb.status, lb.payment_status,
@@ -504,7 +503,7 @@ func (r *LoungeBookingRepository) GetLoungeBookingByID(bookingID uuid.UUID) (*mo
 			l.lounge_name, l.address
 		FROM lounge_bookings lb
 		JOIN lounges l ON lb.lounge_id = l.id
-		WHERE lb.lounge_booking_id = $1
+		WHERE lb.id = $1
 	`
 
 	row := r.db.QueryRow(query, bookingID)
@@ -560,8 +559,22 @@ func (r *LoungeBookingRepository) GetLoungeBookingByID(bookingID uuid.UUID) (*mo
 // GetLoungeBookingByReference returns a booking by reference
 func (r *LoungeBookingRepository) GetLoungeBookingByReference(reference string) (*models.LoungeBooking, error) {
 	var bookingID uuid.UUID
-	query := `SELECT lounge_booking_id FROM lounge_bookings WHERE booking_reference = $1`
+	query := `SELECT id FROM lounge_bookings WHERE booking_reference = $1`
 	err := r.db.Get(&bookingID, query, reference)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return r.GetLoungeBookingByID(bookingID)
+}
+
+// GetLoungeBookingByQRCode returns a booking by QR code data
+func (r *LoungeBookingRepository) GetLoungeBookingByQRCode(qrCodeData string) (*models.LoungeBooking, error) {
+	var bookingID uuid.UUID
+	query := `SELECT id FROM lounge_bookings WHERE qr_code_data = $1`
+	err := r.db.Get(&bookingID, query, qrCodeData)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -576,7 +589,7 @@ func (r *LoungeBookingRepository) GetLoungeBookingsByUserID(userID uuid.UUID, li
 	var bookings []models.LoungeBookingListItem
 	query := `
 		SELECT 
-			lb.lounge_booking_id AS id, lb.booking_reference, lb.lounge_id, l.lounge_name,
+			lb.id, lb.booking_reference, lb.lounge_id, l.lounge_name,
 			lb.booking_type, lb.scheduled_arrival, lb.number_of_guests, lb.primary_guest_name, lb.primary_guest_phone,
 			lb.total_amount, lb.status, lb.payment_status, lb.created_at
 		FROM lounge_bookings lb
@@ -594,7 +607,7 @@ func (r *LoungeBookingRepository) GetUpcomingLoungeBookingsByUserID(userID uuid.
 	var bookings []models.LoungeBookingListItem
 	query := `
 		SELECT 
-			lb.lounge_booking_id AS id, lb.booking_reference, lb.lounge_id, l.lounge_name,
+			lb.id, lb.booking_reference, lb.lounge_id, l.lounge_name,
 			lb.booking_type, lb.scheduled_arrival, lb.number_of_guests, lb.primary_guest_name, lb.primary_guest_phone,
 			lb.total_amount, lb.status, lb.payment_status, lb.created_at
 		FROM lounge_bookings lb
@@ -613,7 +626,7 @@ func (r *LoungeBookingRepository) GetLoungeBookingsByUserIDAndStatus(userID uuid
 	var bookings []models.LoungeBookingListItem
 	query := `
 		SELECT 
-			lb.lounge_booking_id AS id, lb.booking_reference, lb.lounge_id, l.lounge_name,
+			lb.id, lb.booking_reference, lb.lounge_id, l.lounge_name,
 			lb.booking_type, lb.scheduled_arrival, lb.number_of_guests, lb.primary_guest_name, lb.primary_guest_phone,
 			lb.total_amount, lb.status, lb.payment_status, lb.created_at
 		FROM lounge_bookings lb
@@ -632,7 +645,7 @@ func (r *LoungeBookingRepository) GetLoungeBookingsByLoungeID(loungeID uuid.UUID
 	var bookings []models.LoungeBookingListItem
 	query := `
 		SELECT 
-			lb.lounge_booking_id AS id, lb.booking_reference, lb.lounge_id, l.lounge_name,
+			lb.id, lb.booking_reference, lb.lounge_id, l.lounge_name,
 			lb.booking_type, lb.scheduled_arrival, lb.number_of_guests, lb.primary_guest_name, lb.primary_guest_phone,
 			lb.total_amount, lb.status, lb.payment_status, lb.created_at
 		FROM lounge_bookings lb
@@ -692,7 +705,7 @@ func (r *LoungeBookingRepository) GetTodaysLoungeBookings(loungeID uuid.UUID) ([
 	var bookings []models.LoungeBookingListItem
 	query := `
 		SELECT 
-			lb.lounge_booking_id AS id, lb.booking_reference, lb.lounge_id, l.lounge_name,
+			lb.id, lb.booking_reference, lb.lounge_id, l.lounge_name,
 			lb.booking_type, lb.scheduled_arrival, lb.number_of_guests, lb.primary_guest_name, lb.primary_guest_phone,
 			lb.total_amount, lb.status, lb.payment_status, lb.created_at
 		FROM lounge_bookings lb
@@ -707,7 +720,7 @@ func (r *LoungeBookingRepository) GetTodaysLoungeBookings(loungeID uuid.UUID) ([
 
 // UpdateLoungeBookingStatus updates the status of a booking
 func (r *LoungeBookingRepository) UpdateLoungeBookingStatus(bookingID uuid.UUID, status models.LoungeBookingStatus) error {
-	query := `UPDATE lounge_bookings SET status = $2, updated_at = NOW() WHERE lounge_booking_id = $1`
+	query := `UPDATE lounge_bookings SET status = $2, updated_at = NOW() WHERE id = $1`
 	_, err := r.db.Exec(query, bookingID, status)
 	return err
 }
@@ -722,7 +735,7 @@ func (r *LoungeBookingRepository) CancelLoungeBooking(bookingID uuid.UUID, reaso
 	query := `
 		UPDATE lounge_bookings 
 		SET status = 'cancelled', cancelled_at = NOW(), cancellation_reason = $2, updated_at = NOW()
-		WHERE lounge_booking_id = $1
+		WHERE id = $1
 	`
 	_, err := r.db.Exec(query, bookingID, reason)
 	return err
@@ -744,7 +757,7 @@ func (r *LoungeBookingRepository) CheckInBooking(bookingID uuid.UUID) error {
 	query := `
 		UPDATE lounge_bookings 
 		SET status = 'checked_in', actual_arrival = NOW(), updated_at = NOW()
-		WHERE lounge_booking_id = $1 AND status = 'confirmed'
+		WHERE id = $1 AND status = 'confirmed'
 	`
 	result, err := r.db.Exec(query, bookingID)
 	if err != nil {
@@ -762,7 +775,7 @@ func (r *LoungeBookingRepository) CompleteLoungeBooking(bookingID uuid.UUID) err
 	query := `
 		UPDATE lounge_bookings 
 		SET status = 'completed', actual_departure = NOW(), updated_at = NOW()
-		WHERE lounge_booking_id = $1 AND status = 'checked_in'
+		WHERE id = $1 AND status = 'checked_in'
 	`
 	_, err := r.db.Exec(query, bookingID)
 	return err
@@ -770,9 +783,53 @@ func (r *LoungeBookingRepository) CompleteLoungeBooking(bookingID uuid.UUID) err
 
 // UpdatePaymentStatus updates payment status
 func (r *LoungeBookingRepository) UpdatePaymentStatus(bookingID uuid.UUID, status models.LoungePaymentStatus) error {
-	query := `UPDATE lounge_bookings SET payment_status = $2, updated_at = NOW() WHERE lounge_booking_id = $1`
+	query := `UPDATE lounge_bookings SET payment_status = $2, updated_at = NOW() WHERE id = $1`
 	_, err := r.db.Exec(query, bookingID, status)
 	return err
+}
+
+// ToggleBookingCheckInOut toggles between checked_in and checked_out status
+// If status is 'confirmed', moves to 'checked_in' and sets checked_in_by_user_id
+// If status is 'checked_in', moves to 'checked_out' and sets checked_out_by_user_id
+func (r *LoungeBookingRepository) ToggleBookingCheckInOut(bookingID uuid.UUID, staffID uuid.UUID) (*models.LoungeBooking, error) {
+	// Get current booking status
+	var currentStatus string
+	query := `SELECT status FROM lounge_bookings WHERE id = $1`
+	err := r.db.Get(&currentStatus, query, bookingID)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	// Determine new status and update accordingly
+	var updateQuery string
+	if currentStatus == "confirmed" {
+		// Move from confirmed to checked_in
+		updateQuery = `
+			UPDATE lounge_bookings 
+			SET status = 'checked_in', actual_arrival = NOW(), checked_in_by_user_id = $2, updated_at = NOW()
+			WHERE id = $1
+		`
+	} else if currentStatus == "checked_in" {
+		// Move from checked_in to checked_out
+		updateQuery = `
+			UPDATE lounge_bookings 
+			SET status = 'checked_out', actual_departure = NOW(), checked_out_by_user_id = $2, updated_at = NOW()
+			WHERE id = $1
+		`
+	} else {
+		return nil, fmt.Errorf("booking must be in 'confirmed' or 'checked_in' status to toggle check-in/out")
+	}
+
+	_, err = r.db.Exec(updateQuery, bookingID, staffID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Return updated booking
+	return r.GetLoungeBookingByID(bookingID)
 }
 
 // ============================================================================

@@ -7212,6 +7212,154 @@ paths:
         "500":
           $ref: "#/components/responses/InternalServerError"
 
+  /api/v1/lounge-bookings/qr/{qr_code_data}:
+    get:
+      summary: Get lounge booking by QR code data
+      description: |
+        Retrieve a lounge booking by the `qr_code_data` value stored in `lounge_bookings`.
+
+        **Authorization:** Accessible by:
+        - Booking owner (passenger)
+        - Lounge owner (if booking is at their lounge)
+        - Approved & active lounge staff (if booking is at their lounge)
+      operationId: getLoungeBookingByQrCodeData
+      tags:
+        - Lounge Bookings
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: qr_code_data
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "LQ-20260219094711-A1B2C3D4"
+          description: "Exact QR code data from lounge_bookings.qr_code_data"
+      responses:
+        "200":
+          description: Booking retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoungeBookingDetail"
+        "400":
+          description: Invalid request parameters
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/v1/lounge-bookings/{id}/check-in-out:
+    post:
+      summary: Toggle check-in/check-out status for lounge booking
+      description: |
+        Toggle a lounge booking between check-in and check-out states.
+
+        **Behavior:**
+        - If status is `confirmed` → moves to `checked_in` and sets `checked_in_by_user_id`
+        - If status is `checked_in` → moves to `checked_out` and sets `checked_out_by_user_id`
+
+        **Authorization:** Only lounge owner or approved lounge staff at the booking's lounge.
+
+        **Location Tracking:** Optionally accepts latitude/longitude/location_name for check-in/out location recording.
+      operationId: toggleBookingCheckInOut
+      tags:
+        - Lounge Bookings
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                latitude:
+                  type: number
+                  format: double
+                  nullable: true
+                  example: 6.926909
+                  description: "Check-in/out location latitude (optional)"
+                longitude:
+                  type: number
+                  format: double
+                  nullable: true
+                  example: 80.771728
+                  description: "Check-in/out location longitude (optional)"
+                location_name:
+                  type: string
+                  nullable: true
+                  example: "Main Reception"
+                  description: "Human-readable location name (optional)"
+      responses:
+        "200":
+          description: Check-in/Check-out toggled successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Guest checked in successfully"
+                  booking:
+                    $ref: "#/components/schemas/LoungeBookingDetail"
+                  check_in_location:
+                    type: object
+                    nullable: true
+                    properties:
+                      latitude:
+                        type: number
+                      longitude:
+                        type: number
+                      location_name:
+                        type: string
+                      checked_in_at:
+                        type: string
+                        format: date-time
+                  check_out_location:
+                    type: object
+                    nullable: true
+                    properties:
+                      latitude:
+                        type: number
+                      longitude:
+                        type: number
+                      location_name:
+                        type: string
+                      checked_out_at:
+                        type: string
+                        format: date-time
+        "400":
+          description: Invalid request or booking cannot be toggled in current status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
   /api/v1/lounge-bookings/{id}/cancel:
     post:
       summary: Cancel lounge booking
@@ -14648,6 +14796,16 @@ components:
           format: date-time
           nullable: true
           description: "Actual check-out time"
+        checked_in_by_user_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: "Staff user ID who performed the check-in"
+        checked_out_by_user_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: "Staff user ID who performed the check-out"
         base_price:
           type: string
           example: "900.00"
@@ -14694,6 +14852,15 @@ components:
           nullable: true
         internal_notes:
           type: string
+          nullable: true
+        qr_code_data:
+          type: string
+          nullable: true
+          example: "LQ-20260219094711-A1B2C3D4"
+          description: "QR payload used for lounge booking lookup"
+        qr_generated_at:
+          type: string
+          format: date-time
           nullable: true
         cancelled_at:
           type: string

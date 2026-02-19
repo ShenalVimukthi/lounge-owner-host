@@ -820,6 +820,10 @@ func main() {
 			loungeBookings.GET("/:id", loungeBookingHandler.GetLoungeBookingByID)
 			logger.Info("  ✅ GET /api/v1/lounge-bookings/reference/:reference - Get by reference")
 			loungeBookings.GET("/reference/:reference", loungeBookingHandler.GetLoungeBookingByReference)
+			logger.Info("  ✅ GET /api/v1/lounge-bookings/qr/:qr_code_data - Get by QR code data")
+			loungeBookings.GET("/qr/:qr_code_data", loungeBookingHandler.GetLoungeBookingByQRCode)
+			logger.Info("  ✅ POST /api/v1/lounge-bookings/:id/check-in-out - Toggle check-in/check-out")
+			loungeBookings.POST("/:id/check-in-out", loungeBookingHandler.ToggleBookingCheckInOut)
 			logger.Info("  ✅ POST /api/v1/lounge-bookings/:id/cancel - Cancel booking")
 			loungeBookings.POST("/:id/cancel", loungeBookingHandler.CancelLoungeBooking)
 
