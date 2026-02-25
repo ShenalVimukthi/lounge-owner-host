@@ -16,7 +16,10 @@ type LoungeTransportLocation struct {
     
     // LocationStatus defines the availability of a transport location
     Status    LoungeTransportLocationStatus `db:"status" json:"status"`
-    
+
+    // adding estimated duration in minutes(NEW)
+    EstDuration int          `db:"est_duration" json:"est_duration"`
+
     // CreatedAt and UpdatedAt for maintenance
     CreatedAt time.Time      `db:"created_at" json:"created_at"`
     UpdatedAt time.Time      `db:"updated_at" json:"updated_at"`

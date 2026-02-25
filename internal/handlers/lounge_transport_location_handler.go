@@ -1,9 +1,9 @@
 package handlers
 
 import (
-	
 	"log"
 	"net/http"
+
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/smarttransit/sms-auth-backend/internal/database"
@@ -39,13 +39,16 @@ type AddLoungeTransportLocationRequest struct {
 	Longitude float64 `json:"longitude" binding:"required,gte=-180,lte=180"`
 	// NEWLY ADDED ROWS TO GET LoungeID from the request itself
 	LoungeID uuid.UUID `json:"lounge_id" binding:"required"`
+	// NEW Addition
+	EstDuration int `json:"est_duration" binding:"required"`
 }
 
 type UpdateLoungeTransportLocationRequest struct {
-	Location  *string                               `json:"location" binding:"omitempty,min=2,max=200"`
-	Latitude  *float64                              `json:"latitude" binding:"omitempty,gte=-90,lte=90"`
-	Longitude *float64                              `json:"longitude" binding:"omitempty,gte=-180,lte=180"`
-	Status    *models.LoungeTransportLocationStatus `json:"status" binding:"omitempty,oneof=active inactive"`
+	Location    *string                               `json:"location" binding:"omitempty,min=2,max=200"`
+	Latitude    *float64                              `json:"latitude" binding:"omitempty,gte=-90,lte=90"`
+	Longitude   *float64                              `json:"longitude" binding:"omitempty,gte=-180,lte=180"`
+	EstDuration *int                                  `json:"est_duration" binding:"omitempty,gte=0"`
+	Status      *models.LoungeTransportLocationStatus `json:"status" binding:"omitempty,oneof=active inactive"`
 }
 
 // Add transport locations to lounge
@@ -108,6 +111,8 @@ func (h *LoungeTransportLocationHandler) AddLoungeTransportLocation(c *gin.Conte
 		Location:  req.Location,
 		Latitude:  req.Latitude,
 		Longitude: req.Longitude,
+		// NEW addition
+		EstDuration: req.EstDuration,
 	}
 
 	// // Add transport location to lounge
@@ -191,14 +196,15 @@ func (h *LoungeTransportLocationHandler) GetLoungeTransportLocationsByLoungeID(c
 	for _, s := range locations {
 		response = append(response, gin.H{
 
-			"id":         s.ID,
-			"lounge_id":  s.LoungeID,
-			"location":   s.Location,
-			"latitude":   s.Latitude,
-			"longitude":  s.Longitude,
-			"status":     s.Status,
-			"created_at": s.CreatedAt,
-			"updated_at": s.UpdatedAt,
+			"id":           s.ID,
+			"lounge_id":    s.LoungeID,
+			"location":     s.Location,
+			"latitude":     s.Latitude,
+			"longitude":    s.Longitude,
+			"est_duration": s.EstDuration,
+			"status":       s.Status,
+			"created_at":   s.CreatedAt,
+			"updated_at":   s.UpdatedAt,
 		})
 	}
 
@@ -407,16 +413,19 @@ func (h *LoungeTransportLocationHandler) UpdateLoungeTransportLocationByID(c *gi
 	updates := make(map[string]interface{})
 
 	if req.Location != nil {
-		updates["location"] = req.Location
+		updates["location"] = *req.Location
 	}
 	if req.Latitude != nil {
-		updates["latitude"] = req.Latitude
+		updates["latitude"] = *req.Latitude
 	}
 	if req.Longitude != nil {
-		updates["longitude"] = req.Longitude
+		updates["longitude"] = *req.Longitude
+	}
+	if req.EstDuration != nil {
+		updates["est_duration"] = *req.EstDuration
 	}
 	if req.Status != nil {
-		updates["status"] = req.Status
+		updates["status"] = *req.Status
 	}
 
 	// update the location

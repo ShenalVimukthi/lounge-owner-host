@@ -2,15 +2,16 @@ package database
 
 import (
 	"database/sql"
-	"log"
 	"fmt"
-	"time"
+	"log"
 	"strings"
+	"time"
+
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
+
 	// "github.com/pelletier/go-toml/query"
 	"github.com/smarttransit/sms-auth-backend/internal/models"
-
 )
 
 // Lounge Transport Location Repository handles database operations of lounge transport locations
@@ -38,8 +39,8 @@ func (r *LoungeTransportLocationRepository) AddTransportLocationToLounge(Transpo
 
 	// setting up the query to run
 	query := `INSERT INTO lounge_transport_locations (
-			 id, lounge_id, location, latitude, longitude, status, created_at, updated_at)
-			 VALUES($1, $2, $3, $4, $5, $6, $7, $8)
+			 id, lounge_id, location, latitude, longitude, status, created_at, updated_at, est_duration)
+			 VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9)
 			 RETURNING id, created_at, updated_at`
 	
     err := r.db.QueryRowx(query,
@@ -51,6 +52,7 @@ func (r *LoungeTransportLocationRepository) AddTransportLocationToLounge(Transpo
 		TransportLocation.Status,
 		TransportLocation.CreatedAt,
 		TransportLocation.UpdatedAt,
+		TransportLocation.EstDuration,
 	).Scan(&TransportLocation.ID,&TransportLocation.CreatedAt,&TransportLocation.UpdatedAt)
 
 	if err != nil {
@@ -69,7 +71,16 @@ func (r *LoungeTransportLocationRepository) GetLoungeTransportLocationByID(locat
 	// creating a var to store the location
 	var location models.LoungeTransportLocation
 
-	query := `SELECT *
+	query := `SELECT
+				id,
+				lounge_id,
+				location,
+				latitude,
+				longitude,
+				status,
+				created_at,
+				updated_at,
+				COALESCE(est_duration, 0) AS est_duration
 			  FROM lounge_transport_locations
 			  WHERE id = $1`
 	
@@ -92,7 +103,16 @@ func (r *LoungeTransportLocationRepository) GetLoungeTransportLocationsByLoungeI
 	// creating a struct to hold the data
 	var loungeTransportLocations []models.LoungeTransportLocation
 
-	query := `SELECT * 
+	query := `SELECT
+				id,
+				lounge_id,
+				location,
+				latitude,
+				longitude,
+				status,
+				created_at,
+				updated_at,
+				COALESCE(est_duration, 0) AS est_duration
 			  FROM lounge_transport_locations 
 			  WHERE lounge_id = $1
 			  ORDER BY created_at DESC`

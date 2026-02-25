@@ -6672,22 +6672,19 @@ paths:
                         lounge_id:
                           type: string
                           format: uuid
-                        location_name:
+                        location:
                           type: string
                           example: "Bandaranaike International Airport"
-                        description:
-                          type: string
-                          example: "Direct transport to airport terminal"
-                        address:
-                          type: string
-                          example: "Katunayake"
-                        distance_km:
+                        latitude:
                           type: number
-                          example: 35.5
-                          description: Distance from lounge in kilometers
-                        estimated_duration_minutes:
+                          example: 7.2906
+                        longitude:
+                          type: number
+                          example: 80.6337
+                        est_duration:
                           type: integer
                           example: 45
+                          description: Estimated transport duration in minutes
                         status:
                           type: string
                           enum: ["active", "inactive"]
@@ -6726,28 +6723,28 @@ paths:
               type: object
               required:
                 - lounge_id
-                - location_name
-                - address
+                - location
+                - latitude
+                - longitude
+                - est_duration
               properties:
                 lounge_id:
                   type: string
                   format: uuid
                   example: "550e8400-e29b-41d4-a716-446655440000"
-                location_name:
+                location:
                   type: string
                   example: "Bandaranaike International Airport"
-                description:
-                  type: string
-                  example: "Direct transport to airport terminal"
-                address:
-                  type: string
-                  example: "Katunayake"
-                distance_km:
+                latitude:
                   type: number
-                  example: 35.5
-                estimated_duration_minutes:
+                  example: 7.2906
+                longitude:
+                  type: number
+                  example: 80.6337
+                est_duration:
                   type: integer
                   example: 45
+                  description: Estimated transport duration in minutes
       responses:
         "201":
           description: Transport location added successfully
@@ -6756,12 +6753,29 @@ paths:
               schema:
                 type: object
                 properties:
-                  message:
-                    type: string
-                    example: "Transport location added successfully"
-                  location_id:
+                  id:
                     type: string
                     format: uuid
+                  lounge_id:
+                    type: string
+                    format: uuid
+                  location:
+                    type: string
+                  latitude:
+                    type: number
+                  longitude:
+                    type: number
+                  est_duration:
+                    type: integer
+                  status:
+                    type: string
+                    enum: ["active", "inactive"]
+                  created_at:
+                    type: string
+                    format: date-time
+                  updated_at:
+                    type: string
+                    format: date-time
         "400":
           $ref: "#/components/responses/BadRequest"
         "403":
@@ -6803,16 +6817,15 @@ paths:
             schema:
               type: object
               properties:
-                location_name:
+                location:
                   type: string
-                description:
-                  type: string
-                address:
-                  type: string
-                distance_km:
+                latitude:
                   type: number
-                estimated_duration_minutes:
+                longitude:
+                  type: number
+                est_duration:
                   type: integer
+                  minimum: 0
                 status:
                   type: string
                   enum: ["active", "inactive"]
@@ -6824,9 +6837,29 @@ paths:
               schema:
                 type: object
                 properties:
-                  message:
+                  id:
                     type: string
-                    example: "Transport location updated successfully"
+                    format: uuid
+                  lounge_id:
+                    type: string
+                    format: uuid
+                  location:
+                    type: string
+                  latitude:
+                    type: number
+                  longitude:
+                    type: number
+                  est_duration:
+                    type: integer
+                  status:
+                    type: string
+                    enum: ["active", "inactive"]
+                  created_at:
+                    type: string
+                    format: date-time
+                  updated_at:
+                    type: string
+                    format: date-time
         "400":
           $ref: "#/components/responses/BadRequest"
         "403":
@@ -6863,16 +6896,8 @@ paths:
             type: string
             format: uuid
       responses:
-        "200":
+        "204":
           description: Transport location removed successfully
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  message:
-                    type: string
-                    example: "Transport location removed successfully"
         "403":
           $ref: "#/components/responses/Forbidden"
         "404":
