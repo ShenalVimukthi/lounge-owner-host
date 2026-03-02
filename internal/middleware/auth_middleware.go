@@ -40,7 +40,11 @@ func AuthMiddleware(jwtService *jwt.Service) gin.HandlerFunc {
 		// Check Bearer token format
 		parts := strings.SplitN(authHeader, " ", 2)
 		if len(parts) != 2 || parts[0] != "Bearer" {
-			log.Printf("AUTH FAILED: Invalid auth format - Header: %s, Path: %s, IP: %s", authHeader[:20], c.Request.URL.Path, c.ClientIP())
+			headerForLog := authHeader
+			if len(headerForLog) > 20 {
+				headerForLog = headerForLog[:20]
+			}
+			log.Printf("AUTH FAILED: Invalid auth format - Header: %s, Path: %s, IP: %s", headerForLog, c.Request.URL.Path, c.ClientIP())
 			c.JSON(http.StatusUnauthorized, gin.H{
 				"error":   "unauthorized",
 				"message": "Invalid authorization header format. Expected: Bearer <token>",

@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"database/sql"
+	"fmt"
 	"log"
 	"net/http"
 	"time"
@@ -218,18 +219,50 @@ func (h *AuthHandler) SendOTP(c *gin.Context) {
 	expiresAt, _ := h.otpService.GetOTPExpiry(phone)
 	expiresIn := int(time.Until(expiresAt).Seconds())
 
+	// Check SMS configuration before attempting to send
+	if h.config.SMS.Mode == "production" {
+		// Validate SMS configuration
+		if h.config.SMS.Method == "url" && h.config.SMS.ESMSQK == "" {
+			log.Printf("❌ ERROR: SMS API key (DIALOG_SMS_ESMSQK) is not configured")
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error":   "sms_not_configured",
+				"message": "SMS gateway is not properly configured. Please contact support.",
+				"details": "Dialog API key not set",
+			})
+			return
+		}
+
+		if h.config.SMS.Mask == "" {
+			log.Printf("❌ ERROR: SMS Mask (DIALOG_SMS_MASK) is not configured")
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error":   "sms_not_configured",
+				"message": "SMS gateway is not properly configured. Please contact support.",
+				"details": "SMS Mask not set",
+			})
+			return
+		}
+	}
+
 	// Send SMS based on mode
 	if h.config.SMS.Mode == "production" {
 		// Production mode: Send actual SMS via Dialog gateway
 		log.Printf("🔵 Attempting to send SMS to %s via Dialog gateway (App: %s)...", phone, req.AppType)
+		log.Printf("📝 SMS Method: %s", h.config.SMS.Method)
+		if h.config.SMS.Method == "url" {
+			log.Printf("📝 Using API Key: %s****", h.config.SMS.ESMSQK[:3])
+		}
+		log.Printf("📝 SMS Mask: %s", h.config.SMS.Mask)
+
 		transactionID, err := h.smsGateway.SendOTP(phone, otp, req.AppType)
 		if err != nil {
 			log.Printf("❌ ERROR: Failed to send SMS to %s: %v", phone, err)
 			log.Printf("❌ Error type: %T", err)
 			log.Printf("❌ Full error details: %+v", err)
-			c.JSON(http.StatusInternalServerError, ErrorResponse{
-				Error:   "sms_send_failed",
-				Message: "Failed to send OTP via SMS. Please try again.",
+			errorMsg := fmt.Sprintf("Failed to send OTP: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error":   "sms_send_failed",
+				"message": "Failed to send OTP via SMS. Please try again.",
+				"details": errorMsg,
 			})
 			return
 		}
@@ -237,11 +270,12 @@ func (h *AuthHandler) SendOTP(c *gin.Context) {
 		log.Printf("✅ SMS sent successfully to %s, transaction_id: %d", phone, transactionID)
 
 		// Production response (without OTP)
-		c.JSON(http.StatusOK, SendOTPResponse{
-			Message:   "OTP sent successfully to your phone",
-			Phone:     phone,
-			ExpiresAt: expiresAt,
-			ExpiresIn: expiresIn,
+		c.JSON(http.StatusOK, gin.H{
+			"message":    "OTP sent successfully to your phone",
+			"phone":      phone,
+			"expires_at": expiresAt,
+			"expires_in": expiresIn,
+			"mode":       "production",
 		})
 		return
 	}
@@ -1545,9 +1579,15 @@ func (h *AuthHandler) CompleteBasicProfile(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Error:   "profile_update_failed",
-			Message: "Failed to update profile",
+			Message: "Failed to update passenger record",
 		})
 		return
+	}
+
+	// Also update first_name and last_name in users table for synchronization
+	err = h.userRepository.UpdateUserNames(userCtx.UserID, req.FirstName, req.LastName)
+	if err != nil {
+		log.Printf("WARNING: Failed to update user names for synchronization (user %s): %v", userCtx.UserID, err)
 	}
 
 	// Set profile as completed in passengers table
@@ -1758,7 +1798,7 @@ func (h *AuthHandler) UpdateProfile(c *gin.Context) {
 		return
 	}
 
-	// Update profile
+	// Update profile in users table
 	err := h.userRepository.UpdateProfile(
 		userCtx.UserID,
 		req.FirstName,
@@ -1771,9 +1811,38 @@ func (h *AuthHandler) UpdateProfile(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Error:   "profile_update_failed",
-			Message: "Failed to update profile",
+			Message: "Failed to update user profile",
 		})
 		return
+	}
+
+	// Get user to check roles
+	user, err := h.userRepository.GetUserByID(userCtx.UserID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Error:   "profile_retrieval_failed",
+			Message: "Failed to retrieve user profile for role checking",
+		})
+		return
+	}
+
+	// If user is a passenger, update the passengers table too
+	isPassenger := h.userRepository.HasRole(user, "passenger")
+	if isPassenger {
+		err = h.passengerRepository.UpdatePassengerProfile(
+			user.ID,
+			req.FirstName,
+			req.LastName,
+			req.Email,
+			req.Address,
+			req.City,
+			req.PostalCode,
+		)
+		if err != nil {
+			log.Printf("WARNING: Failed to update passenger profile for user %s: %v", user.ID, err)
+			// We don't return error here because the main user record was updated,
+			// but this is why users see old data in the app
+		}
 	}
 
 	// Update profile completion status
@@ -1786,8 +1855,20 @@ func (h *AuthHandler) UpdateProfile(c *gin.Context) {
 		return
 	}
 
+	// If passenger, sync the profile_completed status to passengers table
+	if isPassenger {
+		// Re-fetch user to get the newly updated profile_completed status from users table
+		updatedUser, err := h.userRepository.GetUserByID(userCtx.UserID)
+		if err == nil {
+			err = h.passengerRepository.SetPassengerProfileCompleted(updatedUser.ID, updatedUser.ProfileCompleted)
+			if err != nil {
+				log.Printf("WARNING: Failed to sync passenger profile completion status for user %s: %v", updatedUser.ID, err)
+			}
+		}
+	}
+
 	// Get updated user profile
-	user, err := h.userRepository.GetUserByID(userCtx.UserID)
+	user, err = h.userRepository.GetUserByID(userCtx.UserID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Error:   "profile_retrieval_failed",
