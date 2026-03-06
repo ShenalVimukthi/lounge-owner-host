@@ -27,7 +27,7 @@ type AuthHandler struct {
 	phoneValidator         *validator.PhoneValidator
 	rateLimitService       *services.RateLimitService
 	auditService           *services.AuditService
-	notificationService *services.NotificationService
+	notificationService    *services.NotificationService
 	userRepository         *database.UserRepository
 	passengerRepository    *database.PassengerRepository
 	refreshTokenRepository *database.RefreshTokenRepository
@@ -119,10 +119,9 @@ type VerifyOTPLoungeStaffRequest struct {
 
 	// NEWLY ADDED ROWS OF DATA
 	// Lounge Staff table Data
-	FullName   string `json:"full_name" binding:"required"`
-    NicNumber  string `json:"nic_number" binding:"required"`
-	Email      string `json:"email" binding:"required"`
-
+	FullName  string `json:"full_name" binding:"required"`
+	NicNumber string `json:"nic_number" binding:"required"`
+	Email     string `json:"email" binding:"required"`
 }
 
 // VerifyOTPResponse represents the response after verifying OTP
@@ -281,6 +280,7 @@ func (h *AuthHandler) SendOTP(c *gin.Context) {
 	}
 
 	// Development mode: Return OTP in response (no actual SMS sent)
+	log.Printf("🧪 DEV MODE OTP | phone=%s | otp=%s | app=%s", phone, otp, req.AppType)
 	c.JSON(http.StatusOK, gin.H{
 		"message":    "OTP generated successfully (dev mode - no SMS sent)",
 		"phone":      phone,
@@ -1062,9 +1062,9 @@ func (h *AuthHandler) VerifyOTPLoungeStaff(c *gin.Context, loungeStaffRepo *data
 		c.JSON(http.StatusBadRequest, ErrorResponse{Error: "invalid_lounge_id", Message: "Invalid lounge UUID"})
 		return
 	}
-	// verify lounge exists and approved 
+	// verify lounge exists and approved
 	lounge, err := h.loungeRepository.GetLoungeByID(loungeUUID)
-	
+
 	if err != nil {
 		log.Printf("ERROR: Failed to verify lounge %s: %v", loungeUUID, err)
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
@@ -1102,7 +1102,7 @@ func (h *AuthHandler) VerifyOTPLoungeStaff(c *gin.Context, loungeStaffRepo *data
 	isNew := false
 
 	if existingUser != nil {
-		 // EXISTING USER - Update with new data
+		// EXISTING USER - Update with new data
 		user = existingUser
 		// Add lounge_staff role if not present
 		hasRole := false
@@ -1115,14 +1115,13 @@ func (h *AuthHandler) VerifyOTPLoungeStaff(c *gin.Context, loungeStaffRepo *data
 		if !hasRole {
 			if err := h.userRepository.AddRole(user.ID, "lounge_staff"); err != nil {
 				log.Printf("ERROR: Failed to add lounge_staff role: %v", err)
-				return //added return 
+				return //added return
 			} else {
 				user.Roles = append(user.Roles, "lounge_staff")
 			}
 		}
 
 		// update the user profile data
-		
 
 	} else {
 
@@ -1135,7 +1134,7 @@ func (h *AuthHandler) VerifyOTPLoungeStaff(c *gin.Context, loungeStaffRepo *data
 		// }
 
 		// USER CREATION WITH MORE DETAILS
-		user, err = h.userRepository.CreateUserWithFullData(phone,"lounge_staff",req.FullName,req.NicNumber,req.Email)
+		user, err = h.userRepository.CreateUserWithFullData(phone, "lounge_staff", req.FullName, req.NicNumber, req.Email)
 		if err != nil {
 			log.Printf("ERROR: Failed to create lounge staff user for phone %s: %v", phone, err)
 			c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "user_creation_failed", Message: "Failed to create user account"})
@@ -1150,18 +1149,18 @@ func (h *AuthHandler) VerifyOTPLoungeStaff(c *gin.Context, loungeStaffRepo *data
 	StaffRecord, err := loungeStaffRepo.AddStaffToLoungeWithCompleteData(
 		loungeUUID,
 		user.ID,
-		"active",//changed to active to check db
+		"active", //changed to active to check db
 		req.FullName,
 		req.NicNumber,
 		req.Email,
 	)
-	if err!= nil{
-		 log.Printf("ERROR: Failed to create/update lounge staff record: %v", err)
-         c.JSON(http.StatusInternalServerError, ErrorResponse{
-            Error: "staff_record_failed",
-            Message: "Failed to create staff record",
-        })
-        return
+	if err != nil {
+		log.Printf("ERROR: Failed to create/update lounge staff record: %v", err)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Error:   "staff_record_failed",
+			Message: "Failed to create staff record",
+		})
+		return
 	}
 	// Send notification to lounge owner (non-blocking)
 	go func() {
@@ -1228,7 +1227,7 @@ func (h *AuthHandler) VerifyOTPLoungeStaff(c *gin.Context, loungeStaffRepo *data
 		RefreshToken:     refreshToken,
 		ExpiresIn:        3600,
 		IsNewUser:        isNew,
-		ProfileComplete:  false,// User profile not completed, only lounge staff profile
+		ProfileComplete:  false, // User profile not completed, only lounge staff profile
 		Roles:            user.Roles,
 		RegistrationStep: registrationStep,
 	})
@@ -2435,7 +2434,7 @@ func (h *AuthHandler) VerifyOTPGeneric(c *gin.Context) {
 		RefreshToken:    refreshToken,
 		ExpiresIn:       3600, // 1 hour
 		IsNewUser:       isNew,
-		ProfileComplete: false,         // No profile until role is assigned
-		Roles:           user.Roles,    // Will be empty for new users
+		ProfileComplete: false,      // No profile until role is assigned
+		Roles:           user.Roles, // Will be empty for new users
 	})
 }
