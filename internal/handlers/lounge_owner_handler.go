@@ -282,9 +282,9 @@ func (h *LoungeOwnerHandler) GetProfile(c *gin.Context) {
 	staffCount, _ := h.loungeOwnerRepo.GetStaffCount(owner.ID)
 
 	// Helper functions to extract values from sql.Null* types
-	getNullableString := func(ns sql.NullString) *string {
+	getNullableString := func(ns sql.NullString) interface{} {
 		if ns.Valid {
-			return &ns.String
+			return ns.String
 		}
 		return nil
 	}
@@ -297,6 +297,11 @@ func (h *LoungeOwnerHandler) GetProfile(c *gin.Context) {
 		return nil
 	}
 
+	managerEmail := owner.ManagerEmail
+	if !managerEmail.Valid && owner.Email.Valid {
+		managerEmail = owner.Email
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"id":                  owner.ID,
 		"user_id":             owner.UserID,
@@ -305,8 +310,8 @@ func (h *LoungeOwnerHandler) GetProfile(c *gin.Context) {
 		"business_license":    getNullableString(owner.BusinessLicense),
 		"manager_full_name":   getNullableString(owner.ManagerFullName),
 		"manager_nic_number":  getNullableString(owner.ManagerNICNumber),
-		"manager_email":       getNullableString(owner.ManagerEmail),
-		"district":            owner.District,
+		"manager_email":       getNullableString(managerEmail),
+		"district":            getNullableString(owner.District),
 		"registration_step":   owner.RegistrationStep,
 		"profile_completed":   owner.ProfileCompleted,
 		"verification_status": owner.VerificationStatus,

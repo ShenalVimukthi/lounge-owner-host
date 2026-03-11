@@ -66,7 +66,7 @@ func (r *LoungeOwnerRepository) GetLoungeOwnerByUserID(userID uuid.UUID) (*model
 	query := `
 		SELECT 
 			id, user_id, business_name, business_license, 
-			manager_full_name, manager_nic_number, manager_email, district,
+			manager_full_name, manager_nic_number, manager_email, email, district,
 			registration_step, profile_completed,
 			verification_status, verification_notes, verified_at, verified_by,
 			created_at, updated_at
@@ -89,7 +89,7 @@ func (r *LoungeOwnerRepository) GetLoungeOwnerByID(id uuid.UUID) (*models.Lounge
 	query := `
 		SELECT 
 			id, user_id, business_name, business_license, 
-			manager_full_name, manager_nic_number, manager_email, district,
+			manager_full_name, manager_nic_number, manager_email, email, district,
 			registration_step, profile_completed,
 			verification_status, verification_notes, verified_at, verified_by,
 			created_at, updated_at
