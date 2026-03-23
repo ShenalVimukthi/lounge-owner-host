@@ -20,6 +20,9 @@ type LoungeTransportLocation struct {
     // adding estimated duration in minutes(NEW)
     EstDuration int          `db:"est_duration" json:"est_duration"`
 
+    // adding distance from lounge 
+    Distance float64        `db:"distance" json:"distance"`
+
     // CreatedAt and UpdatedAt for maintenance
     CreatedAt time.Time      `db:"created_at" json:"created_at"`
     UpdatedAt time.Time      `db:"updated_at" json:"updated_at"`

@@ -39,8 +39,11 @@ type AddLoungeTransportLocationRequest struct {
 	Longitude float64 `json:"longitude" binding:"required,gte=-180,lte=180"`
 	// NEWLY ADDED ROWS TO GET LoungeID from the request itself
 	LoungeID uuid.UUID `json:"lounge_id" binding:"required"`
-	// NEW Addition
+	// Estimated Duration
 	EstDuration int `json:"est_duration" binding:"required"`
+	// NEW additin
+	Distance float64 `json:"distance" binding:"required"`
+
 }
 
 type UpdateLoungeTransportLocationRequest struct {
@@ -48,6 +51,7 @@ type UpdateLoungeTransportLocationRequest struct {
 	Latitude    *float64                              `json:"latitude" binding:"omitempty,gte=-90,lte=90"`
 	Longitude   *float64                              `json:"longitude" binding:"omitempty,gte=-180,lte=180"`
 	EstDuration *int                                  `json:"est_duration" binding:"omitempty,gte=0"`
+	Distance    *float64                              `json:"distance" binding:"omitempty,gte=0"`
 	Status      *models.LoungeTransportLocationStatus `json:"status" binding:"omitempty,oneof=active inactive"`
 }
 
@@ -111,8 +115,9 @@ func (h *LoungeTransportLocationHandler) AddLoungeTransportLocation(c *gin.Conte
 		Location:  req.Location,
 		Latitude:  req.Latitude,
 		Longitude: req.Longitude,
-		// NEW addition
 		EstDuration: req.EstDuration,
+		// NEW addition
+		Distance: req.Distance,
 	}
 
 	// // Add transport location to lounge
@@ -202,6 +207,7 @@ func (h *LoungeTransportLocationHandler) GetLoungeTransportLocationsByLoungeID(c
 			"latitude":     s.Latitude,
 			"longitude":    s.Longitude,
 			"est_duration": s.EstDuration,
+			"distance":     s.Distance,
 			"status":       s.Status,
 			"created_at":   s.CreatedAt,
 			"updated_at":   s.UpdatedAt,
@@ -423,6 +429,9 @@ func (h *LoungeTransportLocationHandler) UpdateLoungeTransportLocationByID(c *gi
 	}
 	if req.EstDuration != nil {
 		updates["est_duration"] = *req.EstDuration
+	}
+	if req.Distance != nil {
+		updates["distance"] = *req.Distance
 	}
 	if req.Status != nil {
 		updates["status"] = *req.Status
