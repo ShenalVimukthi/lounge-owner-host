@@ -457,13 +457,29 @@ func (h *LoungeOwnerHandler) GetApprovedLoungeOwnersByDsitrict(c *gin.Context) {
 		return nil
 	}
 
+	ownerIDs := make([]uuid.UUID, 0)
+	for _, owners := range districtGroups {
+		for _, owner := range owners {
+			ownerIDs = append(ownerIDs, owner.ID)
+		}
+	}
+
+	loungeCounts, err := h.loungeOwnerRepo.GetLoungeCountsByOwnerIDs(ownerIDs)
+	if err != nil {
+		log.Printf("ERROR: Failed to get lounge counts for approved owners: %v", err)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Error:   "database_error",
+			Message: "Failed to retrieve lounge owners",
+		})
+		return
+	}
+
 	// Convert to response format grouped by district
 	response := make(map[string][]gin.H)
 	for district, owners := range districtGroups {
 		response[district] = make([]gin.H, 0, len(owners))
 		for _, owner := range owners {
-			// Get lounge count for this owner
-			loungeCount, _ := h.loungeOwnerRepo.GetLoungeCount(owner.ID)
+			loungeCount := loungeCounts[owner.ID]
 
 			response[district] = append(response[district], gin.H{
 				"id":            owner.ID,

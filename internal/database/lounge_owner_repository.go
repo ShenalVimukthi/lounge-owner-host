@@ -386,6 +386,43 @@ func (r *LoungeOwnerRepository) GetLoungeCount(ownerID uuid.UUID) (int, error) {
 	return count, nil
 }
 
+// GetLoungeCountsByOwnerIDs returns lounge counts grouped by lounge owner IDs
+func (r *LoungeOwnerRepository) GetLoungeCountsByOwnerIDs(ownerIDs []uuid.UUID) (map[uuid.UUID]int, error) {
+	counts := make(map[uuid.UUID]int)
+	if len(ownerIDs) == 0 {
+		return counts, nil
+	}
+
+	query, args, err := sqlx.In(
+		`SELECT lounge_owner_id, COUNT(*) AS lounge_count
+		 FROM lounges
+		 WHERE lounge_owner_id IN (?)
+		 GROUP BY lounge_owner_id`,
+		ownerIDs,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build lounge count query: %w", err)
+	}
+
+	query = r.db.Rebind(query)
+
+	var rows []struct {
+		LoungeOwnerID uuid.UUID `db:"lounge_owner_id"`
+		LoungeCount   int       `db:"lounge_count"`
+	}
+
+	err = r.db.Select(&rows, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get lounge counts: %w", err)
+	}
+
+	for _, row := range rows {
+		counts[row.LoungeOwnerID] = row.LoungeCount
+	}
+
+	return counts, nil
+}
+
 // GetStaffCount returns the number of staff across all lounges for a lounge owner
 func (r *LoungeOwnerRepository) GetStaffCount(ownerID uuid.UUID) (int, error) {
 	var count int
