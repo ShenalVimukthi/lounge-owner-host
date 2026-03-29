@@ -122,7 +122,7 @@ func (r *LoungeBookingRepository) GetProductsByLoungeID(loungeID uuid.UUID) ([]m
 			p.available_from, p.available_until, p.available_days,
 			p.service_duration_minutes, p.is_vegetarian, p.is_vegan, p.is_halal,
 			p.allergens, p.calories, p.display_order, p.is_featured, p.tags,
-			p.average_rating, p.total_reviews, p.is_active,
+			p.average_rating, p.total_reviews, p.is_active, COALESCE(p.price_rate_type, 'fixed_rate') as price_rate_type,
 			p.created_at, p.updated_at,
 			c.name as category_name
 		FROM lounge_products p
@@ -155,7 +155,7 @@ func (r *LoungeBookingRepository) GetProductsByLoungeID(loungeID uuid.UUID) ([]m
 			&availableFrom, &availableUntil, pq.Array(&availableDays),
 			&serviceDurationMinutes, &p.IsVegetarian, &p.IsVegan, &p.IsHalal,
 			pq.Array(&allergens), &calories, &p.DisplayOrder, &p.IsFeatured, pq.Array(&tags),
-			&averageRating, &p.TotalReviews, &p.IsActive,
+			&averageRating, &p.TotalReviews, &p.IsActive, &p.PriceRateType,
 			&p.CreatedAt, &p.UpdatedAt, &categoryName,
 		)
 		if err != nil {
@@ -220,7 +220,7 @@ func (r *LoungeBookingRepository) GetProductByID(productID uuid.UUID) (*models.L
 			p.available_from, p.available_until, p.available_days,
 			p.service_duration_minutes, p.is_vegetarian, p.is_vegan, p.is_halal,
 			p.allergens, p.calories, p.display_order, p.is_featured, p.tags,
-			p.average_rating, p.total_reviews, p.is_active,
+			p.average_rating, p.total_reviews, p.is_active, COALESCE(p.price_rate_type, 'fixed_rate') as price_rate_type,
 			p.created_at, p.updated_at,
 			c.name as category_name
 		FROM lounge_products p
@@ -242,7 +242,7 @@ func (r *LoungeBookingRepository) GetProductByID(productID uuid.UUID) (*models.L
 		&availableFrom, &availableUntil, pq.Array(&availableDays),
 		&serviceDurationMinutes, &p.IsVegetarian, &p.IsVegan, &p.IsHalal,
 		pq.Array(&allergens), &calories, &p.DisplayOrder, &p.IsFeatured, pq.Array(&tags),
-		&averageRating, &p.TotalReviews, &p.IsActive,
+		&averageRating, &p.TotalReviews, &p.IsActive, &p.PriceRateType,
 		&p.CreatedAt, &p.UpdatedAt,
 		&categoryName,
 	)
@@ -313,6 +313,9 @@ func (r *LoungeBookingRepository) CreateProduct(product *models.LoungeProduct) e
 	if product.ProductType == "" {
 		product.ProductType = models.LoungeProductTypeProduct
 	}
+	if strings.TrimSpace(product.PriceRateType) == "" {
+		product.PriceRateType = "fixed_rate"
+	}
 	product.IsActive = true
 
 	query := `
@@ -323,11 +326,11 @@ func (r *LoungeBookingRepository) CreateProduct(product *models.LoungeProduct) e
 			available_from, available_until, available_days,
 			service_duration_minutes, is_vegetarian, is_vegan, is_halal,
 			allergens, calories, display_order, is_featured, tags,
-			is_active, created_at, updated_at
+			is_active, created_at, updated_at, price_rate_type
 		) VALUES (
 			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
 			$11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
-			$21, $22, $23, $24, $25, $26, $27, $28, $29
+			$21, $22, $23, $24, $25, $26, $27, $28, $29, $30
 		)
 	`
 	_, err := r.db.Exec(query,
@@ -337,7 +340,7 @@ func (r *LoungeBookingRepository) CreateProduct(product *models.LoungeProduct) e
 		product.AvailableFrom, product.AvailableUntil, pq.Array(product.AvailableDays),
 		product.ServiceDurationMinutes, product.IsVegetarian, product.IsVegan, product.IsHalal,
 		pq.Array(product.Allergens), product.Calories, product.DisplayOrder, product.IsFeatured, pq.Array(product.Tags),
-		product.IsActive, product.CreatedAt, product.UpdatedAt,
+		product.IsActive, product.CreatedAt, product.UpdatedAt, product.PriceRateType,
 	)
 	return err
 }
@@ -345,6 +348,9 @@ func (r *LoungeBookingRepository) CreateProduct(product *models.LoungeProduct) e
 // UpdateProduct updates a product
 func (r *LoungeBookingRepository) UpdateProduct(product *models.LoungeProduct) error {
 	product.UpdatedAt = time.Now()
+	if strings.TrimSpace(product.PriceRateType) == "" {
+		product.PriceRateType = "fixed_rate"
+	}
 	query := `
 		UPDATE lounge_products
 		SET category_id = $2, name = $3, description = $4, product_type = $5,
@@ -353,7 +359,7 @@ func (r *LoungeBookingRepository) UpdateProduct(product *models.LoungeProduct) e
 		    available_from = $14, available_until = $15, available_days = $16,
 		    service_duration_minutes = $17, is_vegetarian = $18, is_vegan = $19, is_halal = $20,
 		    allergens = $21, calories = $22, display_order = $23, is_featured = $24, tags = $25,
-		    updated_at = $26
+		    price_rate_type = $26, updated_at = $27
 		WHERE id = $1
 	`
 	_, err := r.db.Exec(query,
@@ -363,7 +369,7 @@ func (r *LoungeBookingRepository) UpdateProduct(product *models.LoungeProduct) e
 		product.AvailableFrom, product.AvailableUntil, pq.Array(product.AvailableDays),
 		product.ServiceDurationMinutes, product.IsVegetarian, product.IsVegan, product.IsHalal,
 		pq.Array(product.Allergens), product.Calories, product.DisplayOrder, product.IsFeatured, pq.Array(product.Tags),
-		product.UpdatedAt,
+		product.PriceRateType, product.UpdatedAt,
 	)
 	return err
 }

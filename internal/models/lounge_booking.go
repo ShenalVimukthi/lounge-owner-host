@@ -185,6 +185,7 @@ type LoungeProduct struct {
 	IsActive               bool                     `db:"is_active" json:"is_active"`
 	CreatedAt              time.Time                `db:"created_at" json:"created_at"`
 	UpdatedAt              time.Time                `db:"updated_at" json:"updated_at"`
+	PriceRateType          string                   `db:"price_rate_type" json:"price_rate_type"`
 
 	// Populated via JOINs
 	CategoryName string `db:"-" json:"category_name,omitempty"`
@@ -576,19 +577,19 @@ type LoungeBookingResponse struct {
 
 // LoungeBookingListItem is a summary for listing bookings
 type LoungeBookingListItem struct {
-	ID               uuid.UUID           `json:"id" db:"id"`
-	BookingReference string              `json:"booking_reference" db:"booking_reference"`
-	LoungeID         uuid.UUID           `json:"lounge_id" db:"lounge_id"`
-	LoungeName       string              `json:"lounge_name" db:"lounge_name"`
-	BookingType      LoungeBookingType   `json:"booking_type" db:"booking_type"`
-	ScheduledArrival time.Time           `json:"scheduled_arrival" db:"scheduled_arrival"`
-	NumberOfGuests   int                 `json:"number_of_guests" db:"number_of_guests"`
-	PrimaryGuestName string              `json:"primary_guest_name" db:"primary_guest_name"`
-	PrimaryGuestPhone string             `json:"primary_guest_phone" db:"primary_guest_phone"`
-	TotalAmount      string              `json:"total_amount" db:"total_amount"`
-	Status           LoungeBookingStatus `json:"status" db:"status"`
-	PaymentStatus    LoungePaymentStatus `json:"payment_status" db:"payment_status"`
-	CreatedAt        time.Time           `json:"created_at" db:"created_at"`
+	ID                uuid.UUID           `json:"id" db:"id"`
+	BookingReference  string              `json:"booking_reference" db:"booking_reference"`
+	LoungeID          uuid.UUID           `json:"lounge_id" db:"lounge_id"`
+	LoungeName        string              `json:"lounge_name" db:"lounge_name"`
+	BookingType       LoungeBookingType   `json:"booking_type" db:"booking_type"`
+	ScheduledArrival  time.Time           `json:"scheduled_arrival" db:"scheduled_arrival"`
+	NumberOfGuests    int                 `json:"number_of_guests" db:"number_of_guests"`
+	PrimaryGuestName  string              `json:"primary_guest_name" db:"primary_guest_name"`
+	PrimaryGuestPhone string              `json:"primary_guest_phone" db:"primary_guest_phone"`
+	TotalAmount       string              `json:"total_amount" db:"total_amount"`
+	Status            LoungeBookingStatus `json:"status" db:"status"`
+	PaymentStatus     LoungePaymentStatus `json:"payment_status" db:"payment_status"`
+	CreatedAt         time.Time           `json:"created_at" db:"created_at"`
 }
 
 // LoungeBookingWithOrders combines booking summary and all in-lounge orders

@@ -63,7 +63,6 @@ func (r *LoungeTransportLocationRepository) AddTransportLocationToLounge(Transpo
 
 	// if okay sending the created transport location data
 	return &TransportLocation, nil
-
 }
 
 func (r *LoungeTransportLocationRepository) GetLoungeTransportLocationByID(locationID uuid.UUID) (*models.LoungeTransportLocation, error) {

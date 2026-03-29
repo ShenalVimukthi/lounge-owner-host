@@ -119,6 +119,22 @@ type CreateProductRequest struct {
 	DisplayOrder           int      `json:"display_order"`
 	IsFeatured             *bool    `json:"is_featured,omitempty"`
 	Tags                   []string `json:"tags,omitempty"`
+	PriceRateType          string   `json:"price_rate_type"`
+}
+
+func normalizePriceRateType(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "hourly", "hourly_rate":
+		return "hourly_rate"
+	case "daily", "daily_rate":
+		return "daily_rate"
+	case "fixed", "fixed_rate":
+		return "fixed_rate"
+	case "":
+		return ""
+	default:
+		return "fixed_rate"
+	}
 }
 
 // CreateProduct handles POST /api/v1/lounges/:id/products (lounge owner only)
@@ -270,6 +286,12 @@ func (h *LoungeBookingHandler) CreateProduct(c *gin.Context) {
 	if len(req.Tags) > 0 {
 		product.Tags = req.Tags
 	}
+	normalizedCreatePriceRateType := normalizePriceRateType(req.PriceRateType)
+	if normalizedCreatePriceRateType != "" {
+		product.PriceRateType = normalizedCreatePriceRateType
+	} else {
+		product.PriceRateType = "fixed_rate"
+	}
 	product.IsActive = true
 
 	if err := h.bookingRepo.CreateProduct(product); err != nil {
@@ -292,6 +314,7 @@ func (h *LoungeBookingHandler) CreateProduct(c *gin.Context) {
 			"description":              product.Description,
 			"product_type":             string(product.ProductType),
 			"price":                    product.Price,
+			"price_rate_type":          product.PriceRateType,
 			"discounted_price":         product.DiscountedPrice,
 			"image_url":                product.ImageURL,
 			"thumbnail_url":            product.ThumbnailURL,
@@ -346,6 +369,7 @@ type UpdateProductRequest struct {
 	DisplayOrder           int      `json:"display_order"`
 	IsFeatured             *bool    `json:"is_featured,omitempty"`
 	Tags                   []string `json:"tags,omitempty"`
+	PriceRateType          string   `json:"price_rate_type"`
 }
 
 // UpdateProduct handles PUT /api/v1/lounges/:id/products/:product_id
@@ -505,6 +529,12 @@ func (h *LoungeBookingHandler) UpdateProduct(c *gin.Context) {
 	if len(req.Tags) > 0 {
 		product.Tags = req.Tags
 	}
+	normalizedUpdatePriceRateType := normalizePriceRateType(req.PriceRateType)
+	if normalizedUpdatePriceRateType != "" {
+		product.PriceRateType = normalizedUpdatePriceRateType
+	} else if strings.TrimSpace(product.PriceRateType) == "" {
+		product.PriceRateType = "fixed_rate"
+	}
 
 	if err := h.bookingRepo.UpdateProduct(product); err != nil {
 		log.Printf("ERROR: Failed to update product: %v", err)
@@ -527,6 +557,7 @@ func (h *LoungeBookingHandler) UpdateProduct(c *gin.Context) {
 			"description":              product.Description,
 			"product_type":             string(product.ProductType),
 			"price":                    product.Price,
+			"price_rate_type":          product.PriceRateType,
 			"discounted_price":         product.DiscountedPrice,
 			"image_url":                product.ImageURL,
 			"thumbnail_url":            product.ThumbnailURL,
