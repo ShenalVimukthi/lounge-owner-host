@@ -100,6 +100,8 @@ tags:
     description: Bus owner profile and onboarding management
   - name: Lounge Owner
     description: Lounge owner registration and management
+  - name: Districts
+    description: District lookup endpoints
   - name: Lounge Staff
     description: Lounge staff operations and booking management
   - name: Permits
@@ -8639,6 +8641,86 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  # ============================================================================
+  # Districts Endpoints
+  # ============================================================================
+  /api/v1/districts:
+    get:
+      summary: Get all districts
+      description: Retrieve district records from the districts table for dropdown and lookup use cases
+      operationId: getAllDistricts
+      tags:
+        - Districts
+      security: []
+      responses:
+        "200":
+          description: Districts retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  districts:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                          format: uuid
+                          description: District UUID
+                          example: "550e8400-e29b-41d4-a716-446655440000"
+                        district:
+                          type: string
+                          description: District name
+                          example: "Colombo"
+                  count:
+                    type: integer
+                    description: Number of districts returned
+                    example: 25
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/v1/districts/{id}:
+    get:
+      summary: Get district by ID
+      description: Retrieve one district record by id
+      operationId: getDistrictById
+      tags:
+        - Districts
+      security: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: District UUID
+          schema:
+            type: string
+            format: uuid
+            example: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        "200":
+          description: District retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  district:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                        example: "550e8400-e29b-41d4-a716-446655440000"
+                      district:
+                        type: string
+                        example: "Colombo"
         "404":
           $ref: "#/components/responses/NotFound"
         "500":

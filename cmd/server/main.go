@@ -251,6 +251,8 @@ func main() {
 	permitHandler := handlers.NewPermitHandler(permitRepository, ownerRepository, masterRouteRepo)
 	busHandler := handlers.NewBusHandler(busRepository, permitRepository, ownerRepository)
 	masterRouteHandler := handlers.NewMasterRouteHandler(masterRouteRepo)
+	districtRepo := database.NewDistrictRepository(db)
+	districtHandler := handlers.NewDistrictHandler(districtRepo)
 
 	// Initialize bus owner route repository and handler
 	busOwnerRouteRepo := database.NewBusOwnerRouteRepository(db)
@@ -885,6 +887,13 @@ func main() {
 		{
 			masterRoutes.GET("", masterRouteHandler.ListMasterRoutes)
 			masterRoutes.GET("/:id", masterRouteHandler.GetMasterRouteByID)
+		}
+
+		// Districts (public lookup endpoints)
+		districts := v1.Group("/districts")
+		{
+			districts.GET("", districtHandler.ListDistricts)
+			districts.GET("/:id", districtHandler.GetDistrictByID)
 		}
 
 		// Bus routes (all protected)
