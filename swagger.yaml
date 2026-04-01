@@ -4330,6 +4330,11 @@ paths:
                   minLength: 10
                   example: "123 Main St, Colombo 7"
                   description: Full address of the lounge
+                district:
+                  type: string
+                  format: uuid
+                  example: "550e8400-e29b-41d4-a716-446655440000"
+                  description: District UUID (from districts table)
                 state:
                   type: string
                   example: "Western Province"
@@ -5028,6 +5033,10 @@ paths:
                           nullable: true
                         address:
                           type: string
+                        district:
+                          type: string
+                          format: uuid
+                          nullable: true
                         state:
                           type: string
                           nullable: true
@@ -5157,6 +5166,10 @@ paths:
                   type: string
                 address:
                   type: string
+                district:
+                  type: string
+                  format: uuid
+                  nullable: true
                 city:
                   type: string
                 contact_phone:
@@ -12839,6 +12852,11 @@ components:
         address:
           type: string
           example: "123 Main Street, Colombo"
+        district:
+          type: string
+          format: uuid
+          nullable: true
+          example: "550e8400-e29b-41d4-a716-446655440000"
         state:
           type: string
           nullable: true

@@ -42,6 +42,7 @@ func NewLoungeHandler(
 type AddLoungeRequest struct {
 	LoungeName    string   `json:"lounge_name" binding:"required"`
 	Address       string   `json:"address" binding:"required"`
+	District      *string  `json:"district"`                     // District UUID from districts table
 	ContactPhone  string   `json:"contact_phone" binding:"required"`
 	Latitude      *string  `json:"latitude" binding:"required"`  // Required for map location
 	Longitude     *string  `json:"longitude" binding:"required"` // Required for map location
@@ -142,11 +143,25 @@ func (h *LoungeHandler) AddLounge(c *gin.Context) {
 	amenitiesJSON, _ := json.Marshal(req.Amenities)
 	imagesJSON, _ := json.Marshal(req.Images)
 
+	var districtUUID *uuid.UUID
+	if req.District != nil && *req.District != "" {
+		parsedDistrict, parseErr := uuid.Parse(*req.District)
+		if parseErr != nil {
+			c.JSON(http.StatusBadRequest, ErrorResponse{
+				Error:   "validation_error",
+				Message: "Invalid district format. Must be a UUID",
+			})
+			return
+		}
+		districtUUID = &parsedDistrict
+	}
+
 	// Create lounge (without route info)
 	lounge, err := h.loungeRepo.CreateLounge(
 		owner.ID,
 		req.LoungeName,
 		req.Address,
+		districtUUID,
 		req.ContactPhone,
 		req.Latitude,
 		req.Longitude,
@@ -283,6 +298,7 @@ func (h *LoungeHandler) GetMyLounges(c *gin.Context) {
 			"id":              lounge.ID,
 			"lounge_name":     lounge.LoungeName,
 			"address":         lounge.Address,
+			"district":        lounge.District,
 			"contact_phone":   lounge.ContactPhone,
 			"latitude":        lounge.Latitude,
 			"longitude":       lounge.Longitude,
@@ -364,6 +380,7 @@ func (h *LoungeHandler) GetLoungeByID(c *gin.Context) {
 		"lounge_owner_id": lounge.LoungeOwnerID,
 		"lounge_name":     lounge.LoungeName,
 		"address":         lounge.Address,
+		"district":        lounge.District,
 		"contact_phone":   lounge.ContactPhone,
 		"latitude":        lounge.Latitude,
 		"longitude":       lounge.Longitude,
@@ -391,6 +408,7 @@ func (h *LoungeHandler) GetLoungeByID(c *gin.Context) {
 type UpdateLoungeRequest struct {
 	LoungeName    string   `json:"lounge_name" binding:"required"`
 	Address       string   `json:"address" binding:"required"`
+	District      *string  `json:"district"` // District UUID from districts table
 	ContactPhone  string   `json:"contact_phone" binding:"required"`
 	Latitude      *string  `json:"latitude" binding:"required"`
 	Longitude     *string  `json:"longitude" binding:"required"`
@@ -468,6 +486,19 @@ func (h *LoungeHandler) UpdateLounge(c *gin.Context) {
 	amenitiesJSON, _ := json.Marshal(req.Amenities)
 	imagesJSON, _ := json.Marshal(req.Images)
 
+	var districtUUID *uuid.UUID
+	if req.District != nil && *req.District != "" {
+		parsedDistrict, parseErr := uuid.Parse(*req.District)
+		if parseErr != nil {
+			c.JSON(http.StatusBadRequest, ErrorResponse{
+				Error:   "validation_error",
+				Message: "Invalid district format. Must be a UUID",
+			})
+			return
+		}
+		districtUUID = &parsedDistrict
+	}
+
 	// Validate all route UUIDs
 	for i, routeReq := range req.Routes {
 		if _, err := uuid.Parse(routeReq.MasterRouteID); err != nil {
@@ -498,6 +529,7 @@ func (h *LoungeHandler) UpdateLounge(c *gin.Context) {
 		loungeID,
 		req.LoungeName,
 		req.Address,
+		districtUUID,
 		req.ContactPhone,
 		req.Latitude,
 		req.Longitude,
@@ -689,6 +721,7 @@ func (h *LoungeHandler) GetAllActiveLounges(c *gin.Context) {
 			"id":              lounge.ID,
 			"lounge_name":     lounge.LoungeName,
 			"address":         lounge.Address,
+			"district":        lounge.District,
 			"latitude":        lounge.Latitude,
 			"longitude":       lounge.Longitude,
 			"capacity":        lounge.Capacity,
@@ -792,6 +825,7 @@ func (h *LoungeHandler) GetLoungesByStop(c *gin.Context) {
 			"lounge_name":     lounge.LoungeName,
 			"description":     lounge.Description.String,
 			"address":         lounge.Address,
+			"district":        lounge.District,
 			"contact_phone":   lounge.ContactPhone.String,
 			"latitude":        lounge.Latitude.String,
 			"longitude":       lounge.Longitude.String,
@@ -874,6 +908,7 @@ func (h *LoungeHandler) GetLoungesByRoute(c *gin.Context) {
 			"lounge_name":     lounge.LoungeName,
 			"description":     lounge.Description.String,
 			"address":         lounge.Address,
+			"district":        lounge.District,
 			"contact_phone":   lounge.ContactPhone.String,
 			"latitude":        lounge.Latitude.String,
 			"longitude":       lounge.Longitude.String,
@@ -980,6 +1015,7 @@ func (h *LoungeHandler) GetLoungesNearStop(c *gin.Context) {
 			"lounge_name":     lounge.LoungeName,
 			"description":     lounge.Description.String,
 			"address":         lounge.Address,
+			"district":        lounge.District,
 			"contact_phone":   lounge.ContactPhone.String,
 			"latitude":        lounge.Latitude.String,
 			"longitude":       lounge.Longitude.String,

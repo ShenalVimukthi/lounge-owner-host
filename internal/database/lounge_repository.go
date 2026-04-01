@@ -24,6 +24,7 @@ func (r *LoungeRepository) CreateLounge(
 	loungeOwnerID uuid.UUID,
 	loungeName string,
 	address string,
+	district *uuid.UUID,
 	contactPhone string,
 	latitude *string,
 	longitude *string,
@@ -46,15 +47,15 @@ func (r *LoungeRepository) CreateLounge(
 	query := `
 		INSERT INTO lounges (
 			id, lounge_owner_id, lounge_name, address,
-			contact_phone, latitude, longitude, capacity,
+			district, contact_phone, latitude, longitude, capacity,
 			price_1_hour, price_2_hours, price_3_hours, price_until_bus,
 			amenities, images,
 			status, is_operational,
 			created_at, updated_at
 		)
 		VALUES (
-			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
-			$15, $16, NOW(), NOW()
+			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
+			$16, $17, NOW(), NOW()
 		)
 		RETURNING id, created_at, updated_at
 	`
@@ -65,6 +66,7 @@ func (r *LoungeRepository) CreateLounge(
 		loungeOwnerID,
 		loungeName,
 		address,
+		district,
 		contactPhone,
 		latitude,
 		longitude,
@@ -90,7 +92,7 @@ func (r *LoungeRepository) CreateLounge(
 func (r *LoungeRepository) GetLoungeByID(id uuid.UUID) (*models.Lounge, error) {
 	var lounge models.Lounge
 	query := `
-		SELECT id, lounge_owner_id, lounge_name, description, address, state, country, 
+		SELECT id, lounge_owner_id, lounge_name, description, address, district, state, country, 
 		       postal_code, latitude, longitude, contact_phone, capacity, 
 		       price_1_hour, price_2_hours, price_3_hours, price_until_bus, 
 		       amenities, images, status, is_operational, average_rating, 
@@ -111,7 +113,7 @@ func (r *LoungeRepository) GetLoungeByID(id uuid.UUID) (*models.Lounge, error) {
 func (r *LoungeRepository) GetLoungesByOwnerID(ownerID uuid.UUID) ([]models.Lounge, error) {
 	var lounges []models.Lounge
 	query := `
-		SELECT id, lounge_owner_id, lounge_name, description, address, state, country, 
+		SELECT id, lounge_owner_id, lounge_name, description, address, district, state, country, 
 		       postal_code, latitude, longitude, contact_phone, capacity, 
 		       price_1_hour, price_2_hours, price_3_hours, price_until_bus, 
 		       amenities, images, status, is_operational, average_rating, 
@@ -131,7 +133,7 @@ func (r *LoungeRepository) GetLoungesByOwnerID(ownerID uuid.UUID) ([]models.Loun
 func (r *LoungeRepository) GetAllActiveLounges() ([]models.Lounge, error) {
 	var lounges []models.Lounge
 	query := `
-		SELECT id, lounge_owner_id, lounge_name, description, address, state, country, 
+		SELECT id, lounge_owner_id, lounge_name, description, address, district, state, country, 
 		       postal_code, latitude, longitude, contact_phone, capacity, 
 		       price_1_hour, price_2_hours, price_3_hours, price_until_bus, 
 		       amenities, images, status, is_operational, average_rating, 
@@ -171,7 +173,7 @@ func (r *LoungeRepository) GetAllLounges() ([]models.Lounge, error) {
 func (r *LoungeRepository) GetLoungesByStatus(status string) ([]models.Lounge, error) {
 	var lounges []models.Lounge
 	query := `
-		SELECT id, lounge_owner_id, lounge_name, description, address, state, country, 
+		SELECT id, lounge_owner_id, lounge_name, description, address, district, state, country, 
 		       postal_code, latitude, longitude, contact_phone, capacity, 
 		       price_1_hour, price_2_hours, price_3_hours, price_until_bus, 
 		       amenities, images, status, is_operational, average_rating, 
@@ -192,7 +194,7 @@ func (r *LoungeRepository) SearchActiveLounges(state string, limit int) ([]model
 	argNum := 1
 
 	query := `
-		SELECT id, lounge_owner_id, lounge_name, description, address, state, country, 
+		SELECT id, lounge_owner_id, lounge_name, description, address, district, state, country, 
 		       postal_code, latitude, longitude, contact_phone, capacity, 
 		       price_1_hour, price_2_hours, price_3_hours, price_until_bus, 
 		       amenities, images, status, is_operational, average_rating, 
@@ -229,7 +231,7 @@ func (r *LoungeRepository) SearchLounges(state string, limit int) ([]models.Loun
 	argNum := 1
 
 	query := `
-		SELECT id, lounge_owner_id, lounge_name, description, address, state, country, 
+		SELECT id, lounge_owner_id, lounge_name, description, address, district, state, country, 
 			   postal_code, latitude, longitude, contact_phone, capacity, 
 			   price_1_hour, price_2_hours, price_3_hours, price_until_bus, 
 			   amenities, images, status, is_operational, average_rating, 
@@ -263,7 +265,7 @@ func (r *LoungeRepository) SearchLounges(state string, limit int) ([]models.Loun
 func (r *LoungeRepository) GetLoungesByStopID(stopID uuid.UUID) ([]models.Lounge, error) {
 	var lounges []models.Lounge
 	query := `
-		SELECT DISTINCT l.id, l.lounge_owner_id, l.lounge_name, l.description, l.address, l.state, l.country, 
+		SELECT DISTINCT l.id, l.lounge_owner_id, l.lounge_name, l.description, l.address, l.district, l.state, l.country, 
 		       l.postal_code, l.latitude, l.longitude, l.contact_phone, l.capacity, 
 		       l.price_1_hour, l.price_2_hours, l.price_3_hours, l.price_until_bus, 
 		       l.amenities, l.images, l.status, l.is_operational, l.average_rating, 
@@ -286,7 +288,7 @@ func (r *LoungeRepository) GetLoungesByStopID(stopID uuid.UUID) ([]models.Lounge
 func (r *LoungeRepository) GetLoungesByRouteID(routeID uuid.UUID) ([]models.Lounge, error) {
 	var lounges []models.Lounge
 	query := `
-		SELECT DISTINCT l.id, l.lounge_owner_id, l.lounge_name, l.description, l.address, l.state, l.country, 
+		SELECT DISTINCT l.id, l.lounge_owner_id, l.lounge_name, l.description, l.address, l.district, l.state, l.country, 
 		       l.postal_code, l.latitude, l.longitude, l.contact_phone, l.capacity, 
 		       l.price_1_hour, l.price_2_hours, l.price_3_hours, l.price_until_bus, 
 		       l.amenities, l.images, l.status, l.is_operational, l.average_rating, 
@@ -328,7 +330,7 @@ func (r *LoungeRepository) GetLoungesNearStop(masterRouteID uuid.UUID, passenger
 			LEFT JOIN master_route_stops mrs_after ON lr.stop_after_id = mrs_after.id
 			WHERE lr.master_route_id = $1
 		)
-		SELECT DISTINCT l.id, l.lounge_owner_id, l.lounge_name, l.description, l.address, l.state, l.country, 
+		SELECT DISTINCT l.id, l.lounge_owner_id, l.lounge_name, l.description, l.address, l.district, l.state, l.country, 
 		       l.postal_code, l.latitude, l.longitude, l.contact_phone, l.capacity, 
 		       l.price_1_hour, l.price_2_hours, l.price_3_hours, l.price_until_bus, 
 		       l.amenities, l.images, l.status, l.is_operational, l.average_rating, 
@@ -374,6 +376,7 @@ func (r *LoungeRepository) UpdateLounge(
 	id uuid.UUID,
 	loungeName string,
 	address string,
+	district *uuid.UUID,
 	contactPhone string,
 	latitude *string,
 	longitude *string,
@@ -390,24 +393,26 @@ func (r *LoungeRepository) UpdateLounge(
 		SET 
 			lounge_name = $1,
 			address = $2,
-			contact_phone = $3,
-			latitude = $4,
-			longitude = $5,
-			capacity = $6,
-			price_1_hour = $7,
-			price_2_hours = $8,
-			price_3_hours = $9,
-			price_until_bus = $10,
-			amenities = $11,
-			images = $12,
+			district = $3,
+			contact_phone = $4,
+			latitude = $5,
+			longitude = $6,
+			capacity = $7,
+			price_1_hour = $8,
+			price_2_hours = $9,
+			price_3_hours = $10,
+			price_until_bus = $11,
+			amenities = $12,
+			images = $13,
 			updated_at = NOW()
-		WHERE id = $13
+		WHERE id = $14
 	`
 
 	result, err := r.db.Exec(
 		query,
 		loungeName,
 		address,
+		district,
 		contactPhone,
 		latitude,
 		longitude,
