@@ -616,8 +616,10 @@ func main() {
 		{
 			// public lounge owner endpoints (for staff registering and lounge selection parts )
 			loungeOwner.GET("/approved", loungeOwnerHandler.GetApprovedLoungeOwners)
+			loungeOwner.GET("/approved/by-district/:district_id", loungeOwnerHandler.GetApprovedLoungeOwnersByDistrict)
 			loungeOwner.GET("/approved/grouped-by-district", loungeOwnerHandler.GetApprovedLoungeOwnersByDsitrict)
 			loungeOwner.GET("/:owner_id/lounges", loungeOwnerHandler.GetLoungesByOwnerID)
+			loungeOwner.GET("/:owner_id/lounges/by-district/:district_id", loungeOwnerHandler.GetLoungesByOwnerAndDistrict)
 
 			// Protected routes (require JWT authentication)
 			loungeOwner.Use(middleware.AuthMiddleware(jwtService))

@@ -21,7 +21,7 @@ type LoungeOwner struct {
 	ManagerFullName  sql.NullString `db:"manager_full_name" json:"manager_full_name,omitempty"`   // Manager's full legal name
 	ManagerNICNumber sql.NullString `db:"manager_nic_number" json:"manager_nic_number,omitempty"` // Manager's NIC (UNIQUE per person)
 	ManagerEmail     sql.NullString `db:"manager_email" json:"manager_email,omitempty"`           // Manager's email (optional)
-	District         sql.NullString `db:"district" json:"district,omitempty"`
+	DistrictID       *uuid.UUID     `db:"district_id" json:"district_id,omitempty"`               // District UUID from districts table
 
 	// Registration Progress Tracking
 	RegistrationStep LoungeOwnerRegistrationStep `db:"registration_step" json:"registration_step"` // phone_verified, profile_submitted, lounge_added, completed

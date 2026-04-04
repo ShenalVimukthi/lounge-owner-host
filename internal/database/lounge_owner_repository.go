@@ -66,7 +66,7 @@ func (r *LoungeOwnerRepository) GetLoungeOwnerByUserID(userID uuid.UUID) (*model
 	query := `
 		SELECT 
 			id, user_id, business_name, business_license, 
-			manager_full_name, manager_nic_number, manager_email, email, district,
+			manager_full_name, manager_nic_number, manager_email, email, district_id,
 			registration_step, profile_completed,
 			verification_status, verification_notes, verified_at, verified_by,
 			created_at, updated_at
@@ -89,7 +89,7 @@ func (r *LoungeOwnerRepository) GetLoungeOwnerByID(id uuid.UUID) (*models.Lounge
 	query := `
 		SELECT 
 			id, user_id, business_name, business_license, 
-			manager_full_name, manager_nic_number, manager_email, email, district,
+			manager_full_name, manager_nic_number, manager_email, email, district_id,
 			registration_step, profile_completed,
 			verification_status, verification_notes, verified_at, verified_by,
 			created_at, updated_at
@@ -172,7 +172,7 @@ func (r *LoungeOwnerRepository) UpdateBusinessAndManagerInfoWithNIC(
 	managerFullName string,
 	managerNICNumber string,
 	managerEmail *string,
-	district string,
+	districtID *uuid.UUID,
 	managerNICFrontURL *string,
 	managerNICBackURL *string,
 ) error {
@@ -192,7 +192,7 @@ func (r *LoungeOwnerRepository) UpdateBusinessAndManagerInfoWithNIC(
 			manager_full_name = $3,
 			manager_nic_number = $4,
 			manager_email = $5,
-			district = $6,
+			district_id = $6,
 			registration_step = $7,
 			updated_at = NOW()
 		WHERE user_id = $8
@@ -212,7 +212,7 @@ func (r *LoungeOwnerRepository) UpdateBusinessAndManagerInfoWithNIC(
 		managerFullName,
 		managerNICNumber,
 		emailValue,
-		district,
+		districtID,
 		models.RegStepBusinessInfo,
 		userID,
 	)
@@ -451,62 +451,79 @@ func (r *LoungeOwnerRepository) GetApprovedLoungeOwners()([]models.LoungeOwner,e
 
 	query := `
 		SELECT id, user_id, business_name, business_license,
-		       manager_full_name, manager_nic_number, manager_email, email, district,
-		       registration_step, profile_completed, verification_status,
-		       verification_notes, verified_at, verified_by, created_at, updated_at
-		FROM lounge_owners
-		WHERE verification_status = 'approved'
-		ORDER BY business_name ASC
-		`
+		       manager_full_name, manager_nic_number, manager_email, email, district_id,
+			       registration_step, profile_completed, verification_status,
+			       verification_notes, verified_at, verified_by, created_at, updated_at
+			FROM lounge_owners
+			WHERE verification_status = 'approved'
+			ORDER BY business_name ASC
+			`
 
-	err := r.db.Select(&owners, query)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get approved lounge owners: %w", err)
-	}
-
-	
-	return owners,nil
-}
-
-// get lounge owners by district, filtered by district
-func (r *LoungeOwnerRepository) GetApprovedLoungeOwnersByDistrict()(map[string][]models.LoungeOwner,error){
-
-	var owners []models.LoungeOwner
-
-	// query :=`
-	// 		SELECT * FROM lounge_owners
-	// 		WHERE verification_status = 'approved'
-	// 		ORDER BY district ASC, business_name ASC
-	// 		`
-
-	query :=`
-		SELECT id, user_id, business_name, business_license,
-		       manager_full_name, manager_nic_number, manager_email, email, district,
-		       registration_step, profile_completed, verification_status,
-		       verification_notes, verified_at, verified_by, created_at, updated_at
-		FROM lounge_owners
-		WHERE verification_status = 'approved'
-		ORDER BY district ASC, business_name ASC
-		`
-
-	err := r.db.Select(&owners, query)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get approved lounge owners: %w", err)
-	}
-
-	// Group owners by district
-	districtGroups := make(map[string][]models.LoungeOwner)
-	for _, owner := range owners {
-		// Extract district string from sql.NullString
-		district := "Other" // Default for owners without district
-		if owner.District.Valid && owner.District.String != "" {
-			district = owner.District.String
+		err := r.db.Select(&owners, query)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get approved lounge owners: %w", err)
 		}
-		districtGroups[district] = append(districtGroups[district], owner)
+
+		
+		return owners,nil
 	}
 
-	return districtGroups, nil
-}
+	// GetApprovedLoungeOwnersByDistrictID returns approved lounge owners for a given district UUID
+	func (r *LoungeOwnerRepository) GetApprovedLoungeOwnersByDistrictID(districtID uuid.UUID) ([]models.LoungeOwner, error) {
+		var owners []models.LoungeOwner
+
+		query := `
+			SELECT id, user_id, business_name, business_license,
+			       manager_full_name, manager_nic_number, manager_email, email, district_id,
+			       registration_step, profile_completed, verification_status,
+			       verification_notes, verified_at, verified_by, created_at, updated_at
+			FROM lounge_owners
+			WHERE verification_status = 'approved'
+			  AND district_id = $1
+			ORDER BY business_name ASC
+		`
+
+		err := r.db.Select(&owners, query, districtID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get approved lounge owners by district: %w", err)
+		}
+
+		return owners, nil
+	}
+
+	// get lounge owners by district, filtered by district
+	func (r *LoungeOwnerRepository) GetApprovedLoungeOwnersByDistrict()(map[string][]models.LoungeOwner,error){
+
+		var owners []models.LoungeOwner
+
+		query :=`
+			SELECT id, user_id, business_name, business_license,
+			       manager_full_name, manager_nic_number, manager_email, email, district_id,
+			       registration_step, profile_completed, verification_status,
+			       verification_notes, verified_at, verified_by, created_at, updated_at
+			FROM lounge_owners
+			WHERE verification_status = 'approved'
+			ORDER BY district_id ASC, business_name ASC
+			`
+
+		err := r.db.Select(&owners, query)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get approved lounge owners: %w", err)
+		}
+
+		// Group owners by district
+		districtGroups := make(map[string][]models.LoungeOwner)
+		for _, owner := range owners {
+			// Extract district UUID string from pointer
+			district := "Other" // Default for owners without district
+			if owner.DistrictID != nil {
+				district = owner.DistrictID.String()
+			}
+			districtGroups[district] = append(districtGroups[district], owner)
+		}
+
+		return districtGroups, nil
+	}
 
 // UpdateProfile updates lounge owner profile with optional fields
 func (r *LoungeOwnerRepository) UpdateProfile(
@@ -516,7 +533,7 @@ func (r *LoungeOwnerRepository) UpdateProfile(
 	managerFullName *string,
 	managerNICNumber *string,
 	managerEmail *string,
-	district *string,
+	districtID *uuid.UUID,
 ) error {
 	// Build dynamic UPDATE query with only provided fields
 	var updates []string
@@ -553,9 +570,9 @@ func (r *LoungeOwnerRepository) UpdateProfile(
 		argIndex++
 	}
 
-	if district != nil {
-		updates = append(updates, fmt.Sprintf("district = $%d", argIndex))
-		args = append(args, *district)
+	if districtID != nil {
+		updates = append(updates, fmt.Sprintf("district_id = $%d", argIndex))
+		args = append(args, *districtID)
 		argIndex++
 	}
 

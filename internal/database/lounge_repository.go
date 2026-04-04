@@ -129,6 +129,27 @@ func (r *LoungeRepository) GetLoungesByOwnerID(ownerID uuid.UUID) ([]models.Loun
 	return lounges, nil
 }
 
+// GetLoungesByOwnerAndDistrict retrieves lounges matching both owner ID and district UUID
+func (r *LoungeRepository) GetLoungesByOwnerAndDistrict(ownerID uuid.UUID, districtID uuid.UUID) ([]models.Lounge, error) {
+	var lounges []models.Lounge
+	query := `
+		SELECT id, lounge_owner_id, lounge_name, description, address, district, state, country,
+		       postal_code, latitude, longitude, contact_phone, capacity,
+		       price_1_hour, price_2_hours, price_3_hours, price_until_bus,
+		       amenities, images, status, is_operational, average_rating,
+		       created_at, updated_at
+		FROM lounges
+		WHERE lounge_owner_id = $1
+		  AND district = $2
+		ORDER BY created_at DESC
+	`
+	err := r.db.Select(&lounges, query, ownerID, districtID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get lounges by owner and district: %w", err)
+	}
+	return lounges, nil
+}
+
 // GetAllActiveLounges retrieves all active lounges (for public listing)
 func (r *LoungeRepository) GetAllActiveLounges() ([]models.Lounge, error) {
 	var lounges []models.Lounge

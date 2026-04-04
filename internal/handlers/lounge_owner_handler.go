@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"database/sql"
+	"encoding/json"
 	"log"
 	"net/http"
 	"strings"
@@ -45,9 +46,9 @@ type SaveBusinessAndManagerInfoRequest struct {
 	ManagerFullName    string  `json:"manager_full_name" binding:"required"`
 	ManagerNICNumber   string  `json:"manager_nic_number" binding:"required"`
 	ManagerEmail       *string `json:"manager_email"`
-	District           string `json:"district" binding:"required"`
-	ManagerNICFrontURL *string `json:"manager_nic_front_url"` // Optional: NIC front image URL from Supabase
-	ManagerNICBackURL  *string `json:"manager_nic_back_url"`  // Optional: NIC back image URL from Supabase
+	DistrictID         *string `json:"district_id" binding:"required"` // UUID string that will be parsed and validated
+	ManagerNICFrontURL *string `json:"manager_nic_front_url"`          // Optional: NIC front image URL from Supabase
+	ManagerNICBackURL  *string `json:"manager_nic_back_url"`           // Optional: NIC back image URL from Supabase
 }
 
 // SaveBusinessAndManagerInfo handles POST /api/v1/lounge-owner/register/business-info
@@ -96,6 +97,19 @@ func (h *LoungeOwnerHandler) SaveBusinessAndManagerInfo(c *gin.Context) {
 		businessLicenseVal = *req.BusinessLicense
 	}
 
+	// Validate and parse district_id
+	var districtUUID *uuid.UUID
+	if req.DistrictID != nil {
+		parsedUUID, err := uuid.Parse(*req.DistrictID)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, ErrorResponse{
+				Error:   "invalid_district_id",
+				Message: "Invalid district_id format. Must be a valid UUID (e.g., 550e8400-e29b-41d4-a716-446655440000)",
+			})
+			return
+		}
+		districtUUID = &parsedUUID
+	}
 
 	err = h.loungeOwnerRepo.UpdateBusinessAndManagerInfoWithNIC(
 		userCtx.UserID,
@@ -104,7 +118,7 @@ func (h *LoungeOwnerHandler) SaveBusinessAndManagerInfo(c *gin.Context) {
 		req.ManagerFullName,
 		req.ManagerNICNumber,
 		req.ManagerEmail,
-		req.District,
+		districtUUID,
 		req.ManagerNICFrontURL,
 		req.ManagerNICBackURL,
 	)
@@ -303,15 +317,20 @@ func (h *LoungeOwnerHandler) GetProfile(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"id":                  owner.ID,
-		"user_id":             owner.UserID,
-		"phone":               func() *string { if user != nil { return &user.Phone } ; return nil }(),
+		"id":      owner.ID,
+		"user_id": owner.UserID,
+		"phone": func() *string {
+			if user != nil {
+				return &user.Phone
+			}
+			return nil
+		}(),
 		"business_name":       getNullableString(owner.BusinessName),
 		"business_license":    getNullableString(owner.BusinessLicense),
 		"manager_full_name":   getNullableString(owner.ManagerFullName),
 		"manager_nic_number":  getNullableString(owner.ManagerNICNumber),
 		"manager_email":       getNullableString(managerEmail),
-		"district":            getNullableString(owner.District),
+		"district_id":         owner.DistrictID,
 		"registration_step":   owner.RegistrationStep,
 		"profile_completed":   owner.ProfileCompleted,
 		"verification_status": owner.VerificationStatus,
@@ -363,6 +382,82 @@ func (h *LoungeOwnerHandler) GetApprovedLoungeOwners(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
+		"lounge_owners": response,
+	})
+}
+
+// GetApprovedLoungeOwnersByDistrict handles GET /api/v1/lounge-owner/approved/by-district/{district_id}
+func (h *LoungeOwnerHandler) GetApprovedLoungeOwnersByDistrict(c *gin.Context) {
+	districtIDStr := c.Param("district_id")
+	if districtIDStr == "" {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Error:   "validation_error",
+			Message: "district_id is required",
+		})
+		return
+	}
+
+	districtID, err := uuid.Parse(districtIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Error:   "invalid_district_id",
+			Message: "Invalid district_id format. Must be a valid UUID",
+		})
+		return
+	}
+
+	owners, err := h.loungeOwnerRepo.GetApprovedLoungeOwnersByDistrictID(districtID)
+	if err != nil {
+		log.Printf("ERROR: Failed to get approved lounge owners for district %s: %v", districtID, err)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Error:   "database_error",
+			Message: "Failed to retrieve lounge owners",
+		})
+		return
+	}
+
+	getNullableString := func(ns sql.NullString) *string {
+		if ns.Valid {
+			return &ns.String
+		}
+		return nil
+	}
+
+	ownerIDs := make([]uuid.UUID, 0, len(owners))
+	for _, owner := range owners {
+		ownerIDs = append(ownerIDs, owner.ID)
+	}
+
+	loungeCounts, err := h.loungeOwnerRepo.GetLoungeCountsByOwnerIDs(ownerIDs)
+	if err != nil {
+		log.Printf("ERROR: Failed to get lounge counts for district %s: %v", districtID, err)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Error:   "database_error",
+			Message: "Failed to retrieve lounge owners",
+		})
+		return
+	}
+
+	response := make([]gin.H, 0, len(owners))
+	for _, owner := range owners {
+		response = append(response, gin.H{
+			"id":                  owner.ID,
+			"user_id":             owner.UserID,
+			"business_name":       getNullableString(owner.BusinessName),
+			"business_license":    getNullableString(owner.BusinessLicense),
+			"manager_name":        getNullableString(owner.ManagerFullName),
+			"manager_email":       getNullableString(owner.ManagerEmail),
+			"district_id":         owner.DistrictID,
+			"total_lounges":       loungeCounts[owner.ID],
+			"verification_status": owner.VerificationStatus,
+			"registration_step":   owner.RegistrationStep,
+			"profile_completed":   owner.ProfileCompleted,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"district_id":   districtID,
+		"count":         len(response),
 		"lounge_owners": response,
 	})
 }
@@ -422,10 +517,16 @@ func (h *LoungeOwnerHandler) GetLoungesByOwnerID(c *gin.Context) {
 	// Convert to response format
 	response := make([]gin.H, 0, len(lounges))
 	for _, lounge := range lounges {
+		var districtValue interface{} = nil
+		if lounge.District != nil {
+			districtValue = lounge.District.String()
+		}
 		response = append(response, gin.H{
 			"id":          lounge.ID,
 			"lounge_name": lounge.LoungeName,
 			"address":     lounge.Address,
+			"district":    districtValue,
+			"district_id": districtValue,
 			"status":      lounge.Status,
 		})
 	}
@@ -434,6 +535,168 @@ func (h *LoungeOwnerHandler) GetLoungesByOwnerID(c *gin.Context) {
 		"lounges": response,
 	})
 
+}
+
+// GetLoungesByOwnerAndDistrict handles GET /api/v1/lounge-owner/{owner_id}/lounges/by-district/{district_id}
+func (h *LoungeOwnerHandler) GetLoungesByOwnerAndDistrict(c *gin.Context) {
+	ownerIDStr := c.Param("owner_id")
+	ownerID, err := uuid.Parse(ownerIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Error:   "invalid_owner_id",
+			Message: "Invalid lounge owner ID format",
+		})
+		return
+	}
+
+	districtIDStr := c.Param("district_id")
+	districtID, err := uuid.Parse(districtIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Error:   "invalid_district_id",
+			Message: "Invalid district ID format",
+		})
+		return
+	}
+
+	owner, err := h.loungeOwnerRepo.GetLoungeOwnerByID(ownerID)
+	if err != nil {
+		log.Printf("ERROR: Failed to get lounge owner %s: %v", ownerID, err)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Error:   "database_error",
+			Message: "Failed to retrieve lounge owner",
+		})
+		return
+	}
+
+	if owner == nil {
+		c.JSON(http.StatusNotFound, ErrorResponse{
+			Error:   "not_found",
+			Message: "Lounge owner not found",
+		})
+		return
+	}
+
+	if owner.VerificationStatus != models.LoungeVerificationApproved {
+		c.JSON(http.StatusNotFound, ErrorResponse{
+			Error:   "not_found",
+			Message: "Lounge owner not found",
+		})
+		return
+	}
+
+	lounges, err := h.loungeRepo.GetLoungesByOwnerAndDistrict(ownerID, districtID)
+	if err != nil {
+		log.Printf("ERROR: Failed to get lounges for owner %s and district %s: %v", ownerID, districtID, err)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Error:   "database_error",
+			Message: "Failed to retrieve lounges",
+		})
+		return
+	}
+
+	response := make([]gin.H, 0, len(lounges))
+	for _, lounge := range lounges {
+		var districtValue interface{} = nil
+		if lounge.District != nil {
+			districtValue = lounge.District.String()
+		}
+
+		// Parse amenities from JSONB
+		var amenities []string
+		if lounge.Amenities != nil {
+			json.Unmarshal(lounge.Amenities, &amenities)
+		}
+
+		// Parse images from JSONB
+		var images []string
+		if lounge.Images != nil {
+			json.Unmarshal(lounge.Images, &images)
+		}
+
+		// Parse nullable string fields
+		var description interface{} = nil
+		if lounge.Description.Valid {
+			description = lounge.Description.String
+		}
+
+		var contactPhone interface{} = nil
+		if lounge.ContactPhone.Valid {
+			contactPhone = lounge.ContactPhone.String
+		}
+
+		var capacity interface{} = nil
+		if lounge.Capacity.Valid {
+			capacity = lounge.Capacity.Int64
+		}
+
+		var latitude interface{} = nil
+		if lounge.Latitude.Valid {
+			latitude = lounge.Latitude.String
+		}
+
+		var longitude interface{} = nil
+		if lounge.Longitude.Valid {
+			longitude = lounge.Longitude.String
+		}
+
+		var price1Hour interface{} = nil
+		if lounge.Price1Hour.Valid {
+			price1Hour = lounge.Price1Hour.String
+		}
+
+		var price2Hours interface{} = nil
+		if lounge.Price2Hours.Valid {
+			price2Hours = lounge.Price2Hours.String
+		}
+
+		var price3Hours interface{} = nil
+		if lounge.Price3Hours.Valid {
+			price3Hours = lounge.Price3Hours.String
+		}
+
+		var priceUntilBus interface{} = nil
+		if lounge.PriceUntilBus.Valid {
+			priceUntilBus = lounge.PriceUntilBus.String
+		}
+
+		var averageRating interface{} = nil
+		if lounge.AverageRating.Valid {
+			averageRating = lounge.AverageRating.String
+		}
+
+		response = append(response, gin.H{
+			"id":              lounge.ID,
+			"lounge_owner_id": lounge.LoungeOwnerID,
+			"lounge_name":     lounge.LoungeName,
+			"description":     description,
+			"address":         lounge.Address,
+			"district":        districtValue,
+			"district_id":     districtValue,
+			"contact_phone":   contactPhone,
+			"capacity":        capacity,
+			"latitude":        latitude,
+			"longitude":       longitude,
+			"price_1_hour":    price1Hour,
+			"price_2_hours":   price2Hours,
+			"price_3_hours":   price3Hours,
+			"price_until_bus": priceUntilBus,
+			"amenities":       amenities,
+			"images":          images,
+			"status":          lounge.Status,
+			"is_operational":  lounge.IsOperational,
+			"average_rating":  averageRating,
+			"created_at":      lounge.CreatedAt,
+			"updated_at":      lounge.UpdatedAt,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"owner_id":    ownerID,
+		"district_id": districtID,
+		"count":       len(response),
+		"lounges":     response,
+	})
 }
 
 func (h *LoungeOwnerHandler) GetApprovedLoungeOwnersByDsitrict(c *gin.Context) {
@@ -486,7 +749,7 @@ func (h *LoungeOwnerHandler) GetApprovedLoungeOwnersByDsitrict(c *gin.Context) {
 				"business_name": getNullableString(owner.BusinessName),
 				"manager_name":  getNullableString(owner.ManagerFullName),
 				"total_lounges": loungeCount,
-				"district":      district,
+				"district_id":   district,
 			})
 		}
 	}
@@ -508,7 +771,7 @@ type UpdateLoungeOwnerProfileRequest struct {
 	ManagerFullName  *string `json:"manager_full_name"`
 	ManagerNICNumber *string `json:"manager_nic_number"`
 	ManagerEmail     *string `json:"manager_email"`
-	District         *string `json:"district"`
+	DistrictID       *string `json:"district_id"` // UUID string that will be parsed and validated
 }
 
 // UpdateProfile handles PUT /api/v1/lounge-owner/profile
@@ -552,6 +815,19 @@ func (h *LoungeOwnerHandler) UpdateProfile(c *gin.Context) {
 	}
 
 	// Update profile with provided fields
+	var districtUUID *uuid.UUID
+	if req.DistrictID != nil {
+		parsedUUID, err := uuid.Parse(*req.DistrictID)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, ErrorResponse{
+				Error:   "invalid_district_id",
+				Message: "Invalid district_id format. Must be a valid UUID (e.g., 550e8400-e29b-41d4-a716-446655440000)",
+			})
+			return
+		}
+		districtUUID = &parsedUUID
+	}
+
 	err = h.loungeOwnerRepo.UpdateProfile(
 		userCtx.UserID,
 		req.BusinessName,
@@ -559,7 +835,7 @@ func (h *LoungeOwnerHandler) UpdateProfile(c *gin.Context) {
 		req.ManagerFullName,
 		req.ManagerNICNumber,
 		req.ManagerEmail,
-		req.District,
+		districtUUID,
 	)
 	if err != nil {
 		log.Printf("ERROR: Failed to update profile for user %s: %v", userCtx.UserID, err)
@@ -618,7 +894,7 @@ func (h *LoungeOwnerHandler) UpdateProfile(c *gin.Context) {
 		"manager_full_name":   getNullableString(updatedOwner.ManagerFullName),
 		"manager_nic_number":  getNullableString(updatedOwner.ManagerNICNumber),
 		"manager_email":       getNullableString(updatedOwner.ManagerEmail),
-		"district":            getNullableString(updatedOwner.District),
+		"district_id":         updatedOwner.DistrictID,
 		"registration_step":   updatedOwner.RegistrationStep,
 		"profile_completed":   updatedOwner.ProfileCompleted,
 		"verification_status": updatedOwner.VerificationStatus,

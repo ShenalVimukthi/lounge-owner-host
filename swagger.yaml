@@ -4222,11 +4222,11 @@ paths:
                   format: email
                   example: "manager@grandhotel.com"
                   description: Manager's email address (optional)
-                district:
+                district_id:
                   type: string
-                  maxLength: 100
-                  example: "Colombo"
-                  description: District where the lounge is located (for geographic filtering and grouping)
+                  format: uuid
+                  example: "550e8400-e29b-41d4-a716-446655440000"
+                  description: District UUID from districts table (required for geographic filtering and grouping)
       responses:
         "200":
           description: Business and manager information saved successfully
@@ -4587,6 +4587,82 @@ paths:
         "500":
           $ref: "#/components/responses/InternalServerError"
 
+  /api/v1/lounge-owner/approved/by-district/{district_id}:
+    get:
+      summary: Get approved lounge owners by district UUID (Public)
+      description: |
+        Get all approved lounge owners that belong to a specific district UUID.
+
+        **Public endpoint** - no authentication required.
+
+        **Use case:** Filter approved lounge owners for a given district UUID.
+
+        **Filtering:** Uses lounge_owners.district_id = district_id
+      operationId: getApprovedLoungeOwnersByDistrict
+      tags:
+        - Lounge Owner
+      security: []
+      parameters:
+        - name: district_id
+          in: path
+          required: true
+          description: District UUID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Approved lounge owners for the given district retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  district_id:
+                    type: string
+                    format: uuid
+                  count:
+                    type: integer
+                  lounge_owners:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                          format: uuid
+                        user_id:
+                          type: string
+                          format: uuid
+                        business_name:
+                          type: string
+                          nullable: true
+                        business_license:
+                          type: string
+                          nullable: true
+                        manager_name:
+                          type: string
+                          nullable: true
+                        manager_email:
+                          type: string
+                          nullable: true
+                        district_id:
+                          type: string
+                          format: uuid
+                          nullable: true
+                        total_lounges:
+                          type: integer
+                        verification_status:
+                          type: string
+                        registration_step:
+                          type: string
+                        profile_completed:
+                          type: boolean
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
   /api/v1/lounge-owner/approved/grouped-by-district:
     get:
       summary: Get approved lounge owners grouped by district (Public)
@@ -4673,9 +4749,57 @@ paths:
           description: Lounges retrieved successfully
           content:
             application/json:
+
+  /api/v1/lounge-owner/{owner_id}/lounges/by-district/{district_id}:
+    get:
+      summary: Get lounges by owner ID and district ID (Public)
+      description: |
+        Returns comprehensive lounge information for a specific owner in a specific district.
+        Both filters must match:
+        - lounges.lounge_owner_id = owner_id
+        - lounges.district = district_id
+
+        **Public endpoint** - no authentication required.
+        
+        Useful for displaying all lounges belonging to a specific lounge owner within a particular district.
+      operationId: getLoungesByOwnerAndDistrict
+      tags:
+        - Lounge Owner
+      security: []
+      parameters:
+        - name: owner_id
+          in: path
+          required: true
+          description: Lounge owner UUID
+          schema:
+            type: string
+            format: uuid
+        - name: district_id
+          in: path
+          required: true
+          description: District UUID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Lounges retrieved successfully for matching owner and district
+          content:
+            application/json:
               schema:
                 type: object
                 properties:
+                  owner_id:
+                    type: string
+                    format: uuid
+                    example: "550e8400-e29b-41d4-a716-446655440000"
+                  district_id:
+                    type: string
+                    format: uuid
+                    example: "660f8400-e29b-41d4-a716-446655440000"
+                  count:
+                    type: integer
+                    example: 2
                   lounges:
                     type: array
                     items:
@@ -4684,25 +4808,98 @@ paths:
                         id:
                           type: string
                           format: uuid
+                          example: "770a8400-e29b-41d4-a716-446655440000"
+                        lounge_owner_id:
+                          type: string
+                          format: uuid
+                          example: "550e8400-e29b-41d4-a716-446655440000"
                         lounge_name:
                           type: string
-                          example: "City Central Lounge"
+                          example: "Central Lounge"
+                        description:
+                          type: string
+                          nullable: true
+                          example: "Comfortable lounge with premium facilities"
                         address:
                           type: string
                           example: "123 Main Street"
-                        city:
+                        district:
                           type: string
-                          example: "Colombo"
-                        state:
+                          format: uuid
+                          nullable: true
+                          example: "660f8400-e29b-41d4-a716-446655440000"
+                        district_id:
                           type: string
-                          example: "Western"
-                        status:
+                          format: uuid
+                          nullable: true
+                          example: "660f8400-e29b-41d4-a716-446655440000"
+                        contact_phone:
                           type: string
-                          enum: [pending, approved, rejected]
-                          example: "approved"
+                          nullable: true
+                          example: "0771234567"
                         capacity:
                           type: integer
+                          nullable: true
                           example: 50
+                        latitude:
+                          type: string
+                          nullable: true
+                          example: "6.9271"
+                        longitude:
+                          type: string
+                          nullable: true
+                          example: "80.7744"
+                        price_1_hour:
+                          type: string
+                          nullable: true
+                          example: "1500.00"
+                        price_2_hours:
+                          type: string
+                          nullable: true
+                          example: "2500.00"
+                        price_3_hours:
+                          type: string
+                          nullable: true
+                          example: "3500.00"
+                        price_until_bus:
+                          type: string
+                          nullable: true
+                          example: "5000.00"
+                        amenities:
+                          type: array
+                          items:
+                            type: string
+                          example: ["wifi", "ac", "charging", "tv"]
+                        images:
+                          type: array
+                          items:
+                            type: string
+                          example: ["https://example.com/lounge1.jpg", "https://example.com/lounge2.jpg"]
+                        status:
+                          type: string
+                          enum: [pending, approved, suspended, rejected]
+                          example: "approved"
+                        is_operational:
+                          type: boolean
+                          example: true
+                        average_rating:
+                          type: string
+                          nullable: true
+                          example: "4.5"
+                        created_at:
+                          type: string
+                          format: date-time
+                          example: "2024-03-15T10:30:00Z"
+                        updated_at:
+                          type: string
+                          format: date-time
+                          example: "2024-03-20T15:45:00Z"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          description: Lounge owner not found
+        "500":
+          $ref: "#/components/responses/InternalServerError"
                   total:
                     type: integer
                     example: 3
@@ -4773,6 +4970,12 @@ paths:
                     nullable: true
                     example: "manager@grandhotel.com"
                     description: "Manager email - nullable (sql.NullString)"
+                  district_id:
+                    type: string
+                    format: uuid
+                    nullable: true
+                    example: "550e8400-e29b-41d4-a716-446655440000"
+                    description: "District UUID from districts table - nullable (*uuid.UUID)"
                   registration_step:
                     type: string
                     enum:
@@ -4871,10 +5074,12 @@ paths:
                   nullable: true
                   format: email
                   example: "manager@grandhotel.com"
-                district:
+                district_id:
                   type: string
+                  format: uuid
                   nullable: true
-                  example: "Colombo"
+                  example: "550e8400-e29b-41d4-a716-446655440000"
+                  description: District UUID from districts table
       responses:
         "200":
           description: Profile updated successfully
@@ -4911,10 +5116,12 @@ paths:
                     type: string
                     nullable: true
                     example: "manager@grandhotel.com"
-                  district:
+                  district_id:
                     type: string
+                    format: uuid
                     nullable: true
-                    example: "Colombo"
+                    example: "550e8400-e29b-41d4-a716-446655440000"
+                    description: District UUID from districts table
                   registration_step:
                     type: string
                     enum:
