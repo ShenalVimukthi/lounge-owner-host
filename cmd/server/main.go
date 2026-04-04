@@ -263,12 +263,12 @@ func main() {
 	loungeOwnerHandler := handlers.NewLoungeOwnerHandler(loungeOwnerRepository, userRepository, loungeRepository) //added lounge repository new
 	loungeRouteRepository := database.NewLoungeRouteRepository(sqlxDB.DB)
 	loungeHandler := handlers.NewLoungeHandler(loungeRepository, loungeOwnerRepository, loungeRouteRepository)
-	
+
 	// Initialize lounge booking system first before staff handler
 	logger.Info("🏨 Initializing lounge booking system...")
 	loungeBookingRepo := database.NewLoungeBookingRepository(sqlxDB.DB)
 	logger.Info("✓ Lounge booking system initialized")
-	
+
 	loungeStaffHandler := handlers.NewLoungeStaffHandler(loungeStaffRepository, loungeRepository, loungeOwnerRepository, userRepository, phoneValidator, loungeStaffRepository, bookingRepository, loungeBookingRepo)
 	loungeDriverHandler := handlers.NewLoungeDriverHandler(loungeOwnerRepository, loungeRepository, loungeDriverRepository)
 	loungeTransportLocationHandler := handlers.NewLoungeTransportLocationHandler(loungeOwnerRepository, loungeRepository, loungeTransportLocationRepository)
@@ -654,7 +654,7 @@ func main() {
 			loungeStaff.GET("/profile", loungeStaffHandler.GetProfile)
 			logger.Info("  ✅ PUT /api/v1/lounge-staff/profile/update")
 			loungeStaff.PUT("/profile/update", loungeStaffHandler.UpdateProfile)
-			
+
 			// Booking endpoints
 			logger.Info("  ✅ GET /api/v1/lounge-staff/bookings")
 			loungeStaff.GET("/bookings", loungeStaffHandler.GetLoungeBookingsForStaff)
