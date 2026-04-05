@@ -699,7 +699,7 @@ func main() {
 				// logger.Info("  ✅ GET /api/v1/lounges/:id/staff (read-only, no approval needed)")
 				// loungesProtected.GET("/:id/staff", loungeStaffHandler.GetStaffByLounge)//This endpont will most probabbly removed (i kept it for now to backward compatability)
 				logger.Info("  ✅ POST /api/v1/lounges/:id/staff/direct-add (owner can directly add staff) (requires approval)")
-				loungesProtected.POST(":id/staff/direct-add", middleware.RequireApprovedLoungeOwner(loungeOwnerRepository), loungeStaffHandler.AddStaffToLoungeDirectByOwner)
+				loungesProtected.POST("/:id/staff/direct-add", middleware.RequireApprovedLoungeOwner(loungeOwnerRepository), loungeStaffHandler.AddStaffToLoungeDirectByOwner)
 				// Permission management moved to users.roles array - removed permission_type field
 				logger.Info("  ✅ PUT /api/v1/lounges/:id/staff/:staff_id/status (requires approval)")
 				loungesProtected.PUT("/:id/staff/:staff_id/status", middleware.RequireApprovedLoungeOwner(loungeOwnerRepository), loungeStaffHandler.UpdateStaffStatus)

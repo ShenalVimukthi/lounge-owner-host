@@ -1685,6 +1685,388 @@ paths:
           description: Internal server error
 
   # ============================================================================
+  # Admin Approval Endpoints (Lounge Owners, Lounges, Bus Owners, Staff)
+  # ============================================================================
+  /api/v1/admin/lounge-owners/pending:
+    get:
+      summary: Get pending lounge owner registrations
+      description: Retrieve all lounge owner applications awaiting approval
+      operationId: getPendingLoungeOwners
+      tags:
+        - Admin
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: List of pending lounge owner applications
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  lounge_owners:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/LoungeOwner"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/v1/admin/lounge-owners/{id}:
+    get:
+      summary: Get lounge owner details
+      description: Retrieve detailed information about a specific lounge owner
+      operationId: getLoungeOwnerDetails
+      tags:
+        - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          description: Lounge owner UUID
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Lounge owner details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoungeOwner"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/v1/admin/lounge-owners/{id}/approve:
+    post:
+      summary: Approve lounge owner registration
+      description: Approve a pending lounge owner application
+      operationId: approveLoungeOwner
+      tags:
+        - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          description: Lounge owner UUID
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Lounge owner approved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Lounge owner approved successfully"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/v1/admin/lounge-owners/{id}/reject:
+    post:
+      summary: Reject lounge owner registration
+      description: Reject a pending lounge owner application
+      operationId: rejectLoungeOwner
+      tags:
+        - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          description: Lounge owner UUID
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Lounge owner rejected successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Lounge owner rejected successfully"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/v1/admin/lounges/pending:
+    get:
+      summary: Get pending lounge applications
+      description: Retrieve all lounge registrations awaiting approval
+      operationId: getPendingLounges
+      tags:
+        - Admin
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: List of pending lounges
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  lounges:
+                    type: array
+                    items:
+                      type: object
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/v1/admin/lounges/{id}/approve:
+    post:
+      summary: Approve lounge registration
+      description: Approve a pending lounge application
+      operationId: approveLounge
+      tags:
+        - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          description: Lounge UUID
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Lounge approved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Lounge approved successfully"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/v1/admin/lounges/{id}/reject:
+    post:
+      summary: Reject lounge registration
+      description: Reject a pending lounge application
+      operationId: rejectLounge
+      tags:
+        - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          description: Lounge UUID
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Lounge rejected successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Lounge rejected successfully"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/v1/admin/bus-owners/pending:
+    get:
+      summary: Get pending bus owner verifications
+      description: Retrieve all bus owners awaiting verification
+      operationId: getPendingBusOwners
+      tags:
+        - Admin
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: List of pending bus owners
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  bus_owners:
+                    type: array
+                    items:
+                      type: object
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/v1/admin/bus-owners/{id}/approve:
+    post:
+      summary: Approve bus owner verification
+      description: Approve a pending bus owner verification request
+      operationId: approveBusOwner
+      tags:
+        - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          description: Bus owner UUID
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Bus owner approved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Bus owner approved successfully"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/v1/admin/staff/pending:
+    get:
+      summary: Get pending staff approvals
+      description: Retrieve all staff members awaiting approval
+      operationId: getPendingStaff
+      tags:
+        - Admin
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: List of pending staff
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  staff:
+                    type: array
+                    items:
+                      type: object
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/v1/admin/staff/{id}/approve:
+    post:
+      summary: Approve staff
+      description: Approve a pending staff application
+      operationId: approveStaff
+      tags:
+        - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          description: Staff UUID
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Staff approved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Staff approved successfully"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/v1/admin/dashboard/stats:
+    get:
+      summary: Get admin dashboard statistics
+      description: Retrieve dashboard statistics for admin overview
+      operationId: getDashboardStats
+      tags:
+        - Admin
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Dashboard statistics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  stats:
+                    type: object
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  # ============================================================================
   # Staff Endpoints
   # ============================================================================
   /api/v1/staff/check-registration:
