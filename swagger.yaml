@@ -2009,7 +2009,7 @@ paths:
     post:
       summary: Approve staff
       description: Approve a pending staff application
-      operationId: approveStaff
+      operationId: approveAdminStaff
       tags:
         - Admin
       security:
@@ -5056,7 +5056,7 @@ paths:
         **Use case:** Helps lounge staff find owners in their local district.
 
         **Response:** Map of district names to arrays of lounge owners.
-      operationId: getApprovedLoungeOwnersByDistrict
+      operationId: getApprovedLoungeOwnersGroupedByDistrict
       tags:
         - Lounge Owner
       security: []
@@ -5131,6 +5131,26 @@ paths:
           description: Lounges retrieved successfully
           content:
             application/json:
+              schema:
+                type: object
+                properties:
+                  owner_id:
+                    type: string
+                    format: uuid
+                    example: "550e8400-e29b-41d4-a716-446655440000"
+                  count:
+                    type: integer
+                    example: 2
+                  lounges:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Lounge"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          description: Lounge owner not found
+        "500":
+          $ref: "#/components/responses/InternalServerError"
 
   /api/v1/lounge-owner/{owner_id}/lounges/by-district/{district_id}:
     get:
@@ -5142,7 +5162,7 @@ paths:
         - lounges.district = district_id
 
         **Public endpoint** - no authentication required.
-        
+
         Useful for displaying all lounges belonging to a specific lounge owner within a particular district.
       operationId: getLoungesByOwnerAndDistrict
       tags:
@@ -5256,7 +5276,11 @@ paths:
                           type: array
                           items:
                             type: string
-                          example: ["https://example.com/lounge1.jpg", "https://example.com/lounge2.jpg"]
+                          example:
+                            [
+                              "https://example.com/lounge1.jpg",
+                              "https://example.com/lounge2.jpg",
+                            ]
                         status:
                           type: string
                           enum: [pending, approved, suspended, rejected]
@@ -5280,24 +5304,6 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "404":
           description: Lounge owner not found
-        "500":
-          $ref: "#/components/responses/InternalServerError"
-                  total:
-                    type: integer
-                    example: 3
-        "404":
-          description: Lounge owner not found
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  error:
-                    type: string
-                    example: "owner_not_found"
-                  message:
-                    type: string
-                    example: "Lounge owner not found"
         "500":
           $ref: "#/components/responses/InternalServerError"
 
@@ -6297,7 +6303,7 @@ paths:
         - `declined` → `approvement_status='declined'`, `employment_status='inactive'`
 
         **Required:** Lounge owner must be approved (`RequireApprovedLoungeOwner` middleware)
-      operationId: approveStaff
+      operationId: approveLoungeStaffApplication
       tags:
         - Lounge Owner
       security:
@@ -12097,7 +12103,7 @@ paths:
     post:
       summary: Board passenger
       description: Conductor marks specific seat as boarded (passenger is on the bus).
-      operationId: boardPassenger
+      operationId: boardStaffBookingPassenger
       tags:
         - Staff Bookings
       security:
@@ -13419,6 +13425,63 @@ components:
         created_at:
           type: string
           format: date-time
+
+    LoungeOwner:
+      type: object
+      description: Lounge owner profile information
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        user_id:
+          type: string
+          format: uuid
+          example: "3edeb9af-51c3-4c24-a5d0-76c9dee2d4ea"
+        business_name:
+          type: string
+          nullable: true
+          example: "City Central Lounge Services"
+        business_license:
+          type: string
+          nullable: true
+          example: "PV123456"
+        manager_name:
+          type: string
+          nullable: true
+          example: "John Doe"
+        manager_email:
+          type: string
+          format: email
+          nullable: true
+          example: "manager@example.com"
+        district_id:
+          type: string
+          format: uuid
+          nullable: true
+          example: "660f8400-e29b-41d4-a716-446655440000"
+        total_lounges:
+          type: integer
+          example: 3
+        verification_status:
+          type: string
+          enum: [pending, approved, rejected]
+          example: "pending"
+        registration_step:
+          type: string
+          nullable: true
+          example: "business_details"
+        profile_completed:
+          type: boolean
+          example: false
+        created_at:
+          type: string
+          format: date-time
+          example: "2024-03-15T10:30:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2024-03-20T15:45:00Z"
 
     Lounge:
       type: object
@@ -17519,3 +17582,17 @@ components:
               value:
                 error: Internal server error
                 details: An unexpected error occurred
+
+    AccountNotVerifiedError:
+      description: Account is not verified
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/AccountNotVerifiedError"
+          examples:
+            accountNotVerified:
+              value:
+                error: Bus owner account is not verified
+                code: ACCOUNT_NOT_VERIFIED
+                verification_status: pending
+                message: Your account must be verified by admin before you can perform this operation. Please wait for verification or contact support.
