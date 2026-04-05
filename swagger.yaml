@@ -6156,6 +6156,63 @@ paths:
         "500":
           $ref: "#/components/responses/InternalServerError"
 
+    get:
+      summary: Get staff for lounge with optional filtering
+      description: |
+        Get all staff members assigned to a specific lounge.
+
+        **Optional Filtering:** Use `approval_status` query parameter to filter staff.
+
+        **Examples:**
+        - `/lounges/{lounge_id}/staff` - Get all staff
+        - `/lounges/{lounge_id}/staff?approval_status=pending` - Get pending applications
+        - `/lounges/{lounge_id}/staff?approval_status=approved` - Get approved staff only
+        - `/lounges/{lounge_id}/staff?approval_status=declined` - Get declined applications
+      operationId: getStaffByLoungeWithFilter
+      tags:
+        - Lounge Owner
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: lounge_id
+          in: path
+          required: true
+          description: Lounge UUID
+          schema:
+            type: string
+            format: uuid
+        - name: approval_status
+          in: query
+          required: false
+          description: Filter by approval status
+          schema:
+            type: string
+            enum: ["pending", "approved", "declined"]
+            example: "pending"
+      responses:
+        "200":
+          description: Staff list retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  staff:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/LoungeStaff"
+                  total:
+                    type: integer
+                    example: 5
+                  filter_applied:
+                    type: string
+                    example: "pending"
+                    description: Shows which filter was applied (if any)
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
   /api/v1/lounges/{lounge_id}/staff/direct-add:
     post:
       summary: Directly add staff to lounge (Owner only)
@@ -6225,63 +6282,6 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           description: Lounge not found
-        "500":
-          $ref: "#/components/responses/InternalServerError"
-
-    get:
-      summary: Get staff for lounge with optional filtering
-      description: |
-        Get all staff members assigned to a specific lounge.
-
-        **Optional Filtering:** Use `approval_status` query parameter to filter staff.
-
-        **Examples:**
-        - `/lounges/{lounge_id}/staff` - Get all staff
-        - `/lounges/{lounge_id}/staff?approval_status=pending` - Get pending applications
-        - `/lounges/{lounge_id}/staff?approval_status=approved` - Get approved staff only
-        - `/lounges/{lounge_id}/staff?approval_status=declined` - Get declined applications
-      operationId: getStaffByLoungeWithFilter
-      tags:
-        - Lounge Owner
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: lounge_id
-          in: path
-          required: true
-          description: Lounge UUID
-          schema:
-            type: string
-            format: uuid
-        - name: approval_status
-          in: query
-          required: false
-          description: Filter by approval status
-          schema:
-            type: string
-            enum: ["pending", "approved", "declined"]
-            example: "pending"
-      responses:
-        "200":
-          description: Staff list retrieved
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  staff:
-                    type: array
-                    items:
-                      $ref: "#/components/schemas/LoungeStaff"
-                  total:
-                    type: integer
-                    example: 5
-                  filter_applied:
-                    type: string
-                    example: "pending"
-                    description: Shows which filter was applied (if any)
-        "403":
-          $ref: "#/components/responses/Forbidden"
         "500":
           $ref: "#/components/responses/InternalServerError"
 
