@@ -23,8 +23,11 @@ func NewLoungeRepository(db *sqlx.DB) *LoungeRepository {
 func (r *LoungeRepository) CreateLounge(
 	loungeOwnerID uuid.UUID,
 	loungeName string,
+	description *string,
 	address string,
 	district *uuid.UUID,
+	state *string,
+	postalCode *string,
 	contactPhone string,
 	latitude *string,
 	longitude *string,
@@ -46,8 +49,8 @@ func (r *LoungeRepository) CreateLounge(
 
 	query := `
 		INSERT INTO lounges (
-			id, lounge_owner_id, lounge_name, address,
-			district, contact_phone, latitude, longitude, capacity,
+			id, lounge_owner_id, lounge_name, description, address,
+			district, state, postal_code, contact_phone, latitude, longitude, capacity,
 			price_1_hour, price_2_hours, price_3_hours, price_until_bus,
 			amenities, images,
 			status, is_operational,
@@ -55,7 +58,7 @@ func (r *LoungeRepository) CreateLounge(
 		)
 		VALUES (
 			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
-			$16, $17, NOW(), NOW()
+			$16, $17, $18, $19, $20, NOW(), NOW()
 		)
 		RETURNING id, created_at, updated_at
 	`
@@ -65,8 +68,11 @@ func (r *LoungeRepository) CreateLounge(
 		lounge.ID,
 		loungeOwnerID,
 		loungeName,
+		description,
 		address,
 		district,
+		state,
+		postalCode,
 		contactPhone,
 		latitude,
 		longitude,
@@ -174,7 +180,7 @@ func (r *LoungeRepository) GetAllActiveLounges() ([]models.Lounge, error) {
 func (r *LoungeRepository) GetAllLounges() ([]models.Lounge, error) {
 	var lounges []models.Lounge
 	query := `
-		SELECT id, lounge_owner_id, lounge_name, description, address, state, country, 
+		SELECT id, lounge_owner_id, lounge_name, description, address, district, state, country, 
 			   postal_code, latitude, longitude, contact_phone, capacity, 
 			   price_1_hour, price_2_hours, price_3_hours, price_until_bus, 
 			   amenities, images, status, is_operational, average_rating, 
@@ -396,8 +402,11 @@ func (r *LoungeRepository) GetDistinctStates() ([]string, error) {
 func (r *LoungeRepository) UpdateLounge(
 	id uuid.UUID,
 	loungeName string,
+	description *string,
 	address string,
 	district *uuid.UUID,
+	state *string,
+	postalCode *string,
 	contactPhone string,
 	latitude *string,
 	longitude *string,
@@ -413,27 +422,33 @@ func (r *LoungeRepository) UpdateLounge(
 		UPDATE lounges 
 		SET 
 			lounge_name = $1,
-			address = $2,
-			district = $3,
-			contact_phone = $4,
-			latitude = $5,
-			longitude = $6,
-			capacity = $7,
-			price_1_hour = $8,
-			price_2_hours = $9,
-			price_3_hours = $10,
-			price_until_bus = $11,
-			amenities = $12,
-			images = $13,
+			description = $2,
+			address = $3,
+			district = $4,
+			state = $5,
+			postal_code = $6,
+			contact_phone = $7,
+			latitude = $8,
+			longitude = $9,
+			capacity = $10,
+			price_1_hour = $11,
+			price_2_hours = $12,
+			price_3_hours = $13,
+			price_until_bus = $14,
+			amenities = $15,
+			images = $16,
 			updated_at = NOW()
-		WHERE id = $14
+		WHERE id = $17
 	`
 
 	result, err := r.db.Exec(
 		query,
 		loungeName,
+		description,
 		address,
 		district,
+		state,
+		postalCode,
 		contactPhone,
 		latitude,
 		longitude,

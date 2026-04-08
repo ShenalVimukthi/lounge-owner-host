@@ -5595,7 +5595,7 @@ paths:
     get:
       summary: Get all my lounges
       description: |
-        Retrieve all lounges owned by the authenticated lounge owner with pricing and amenities.
+        Retrieve all lounges owned by the authenticated lounge owner with full saved details for editing.
       operationId: getMyLounges
       tags:
         - Lounge Owner
@@ -5702,10 +5702,143 @@ paths:
         "500":
           $ref: "#/components/responses/InternalServerError"
 
+  /api/v1/lounges:
+    post:
+      summary: Create new lounge
+      description: Create a new lounge with full details including pricing, amenities, and service routes. Requires approved lounge owner status.
+      operationId: createLounge
+      tags:
+        - Lounge Owner
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - lounge_name
+                - address
+                - contact_phone
+                - latitude
+                - longitude
+                - routes
+              properties:
+                lounge_name:
+                  type: string
+                  example: "City Central Lounge"
+                description:
+                  type: string
+                  nullable: true
+                  example: "Comfortable lounge with modern amenities"
+                address:
+                  type: string
+                  example: "123 Main St, Colombo 7"
+                district:
+                  type: string
+                  format: uuid
+                  nullable: true
+                  example: "550e8400-e29b-41d4-a716-446655440000"
+                state:
+                  type: string
+                  nullable: true
+                  example: "Western Province"
+                postal_code:
+                  type: string
+                  nullable: true
+                  example: "00700"
+                contact_phone:
+                  type: string
+                  example: "+94112345678"
+                latitude:
+                  type: string
+                  example: "6.9271"
+                longitude:
+                  type: string
+                  example: "79.8612"
+                capacity:
+                  type: integer
+                  nullable: true
+                  example: 50
+                price_1_hour:
+                  type: string
+                  nullable: true
+                  example: "500.00"
+                price_2_hours:
+                  type: string
+                  nullable: true
+                  example: "900.00"
+                price_3_hours:
+                  type: string
+                  nullable: true
+                  example: "1200.00"
+                price_until_bus:
+                  type: string
+                  nullable: true
+                  example: "1500.00"
+                routes:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    required:
+                      - master_route_id
+                      - stop_before_id
+                      - stop_after_id
+                    properties:
+                      master_route_id:
+                        type: string
+                        format: uuid
+                      stop_before_id:
+                        type: string
+                        format: uuid
+                      stop_after_id:
+                        type: string
+                        format: uuid
+                amenities:
+                  type: array
+                  items:
+                    type: string
+                images:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        "201":
+          description: Lounge created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Lounge added successfully"
+                  lounge_id:
+                    type: string
+                    format: uuid
+                  registration_step:
+                    type: string
+                    example: "completed"
+                  profile_completed:
+                    type: boolean
+                    example: true
+                  status:
+                    type: string
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
   /api/v1/lounges/{id}:
     get:
       summary: Get lounge by ID
-      description: Get detailed information about a specific lounge
+      description: Get full lounge details for editing or viewing a specific lounge
       operationId: getLoungeByID
       tags:
         - Lounge Owner
@@ -5732,7 +5865,7 @@ paths:
 
     put:
       summary: Update lounge
-      description: Update lounge information including pricing
+      description: Update complete lounge information including location, contact, pricing, routes, and amenities
       operationId: updateLounge
       tags:
         - Lounge Owner
@@ -5754,31 +5887,82 @@ paths:
               required:
                 - lounge_name
                 - address
-                - city
                 - contact_phone
+                - latitude
+                - longitude
+                - routes
               properties:
                 lounge_name:
                   type: string
+                  example: "City Central Lounge"
+                description:
+                  type: string
+                  nullable: true
+                  example: "Comfortable lounge with modern amenities"
                 address:
                   type: string
+                  example: "123 Main St, Colombo 7"
                 district:
                   type: string
                   format: uuid
                   nullable: true
-                city:
+                  example: "550e8400-e29b-41d4-a716-446655440000"
+                state:
                   type: string
+                  nullable: true
+                  example: "Western Province"
+                postal_code:
+                  type: string
+                  nullable: true
+                  example: "00700"
                 contact_phone:
                   type: string
+                  example: "+94112345678"
                 latitude:
                   type: string
+                  example: "6.9271"
                 longitude:
                   type: string
+                  example: "79.8612"
+                capacity:
+                  type: integer
+                  nullable: true
+                  example: 50
                 price_1_hour:
                   type: string
+                  nullable: true
+                  example: "500.00"
                 price_2_hours:
                   type: string
+                  nullable: true
+                  example: "900.00"
+                price_3_hours:
+                  type: string
+                  nullable: true
+                  example: "1200.00"
                 price_until_bus:
                   type: string
+                  nullable: true
+                  example: "1500.00"
+                routes:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    required:
+                      - master_route_id
+                      - stop_before_id
+                      - stop_after_id
+                    properties:
+                      master_route_id:
+                        type: string
+                        format: uuid
+                      stop_before_id:
+                        type: string
+                        format: uuid
+                      stop_after_id:
+                        type: string
+                        format: uuid
                 amenities:
                   type: array
                   items:
@@ -5790,6 +5974,111 @@ paths:
       responses:
         "200":
           description: Lounge updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Lounge updated successfully"
+                  lounge:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      lounge_owner_id:
+                        type: string
+                        format: uuid
+                      lounge_name:
+                        type: string
+                      description:
+                        type: string
+                        nullable: true
+                      address:
+                        type: string
+                      district:
+                        type: string
+                        format: uuid
+                        nullable: true
+                      state:
+                        type: string
+                        nullable: true
+                      postal_code:
+                        type: string
+                        nullable: true
+                      contact_phone:
+                        type: string
+                        nullable: true
+                      latitude:
+                        type: string
+                        nullable: true
+                      longitude:
+                        type: string
+                        nullable: true
+                      capacity:
+                        type: integer
+                        nullable: true
+                      price_1_hour:
+                        type: string
+                        nullable: true
+                      price_2_hours:
+                        type: string
+                        nullable: true
+                      price_3_hours:
+                        type: string
+                        nullable: true
+                      price_until_bus:
+                        type: string
+                        nullable: true
+                      amenities:
+                        type: array
+                        items:
+                          type: string
+                      images:
+                        type: array
+                        items:
+                          type: string
+                      routes:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            id:
+                              type: string
+                              format: uuid
+                            lounge_id:
+                              type: string
+                              format: uuid
+                            master_route_id:
+                              type: string
+                              format: uuid
+                            stop_before_id:
+                              type: string
+                              format: uuid
+                            stop_after_id:
+                              type: string
+                              format: uuid
+                            created_at:
+                              type: string
+                              format: date-time
+                            updated_at:
+                              type: string
+                              format: date-time
+                      status:
+                        type: string
+                      is_operational:
+                        type: boolean
+                      average_rating:
+                        type: string
+                        nullable: true
+                      created_at:
+                        type: string
+                        format: date-time
+                      updated_at:
+                        type: string
+                        format: date-time
         "403":
           $ref: "#/components/responses/Forbidden"
         "404":

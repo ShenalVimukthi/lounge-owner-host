@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -41,8 +42,11 @@ func NewLoungeHandler(
 // AddLoungeRequest represents the lounge creation request
 type AddLoungeRequest struct {
 	LoungeName    string   `json:"lounge_name" binding:"required"`
+	Description   *string  `json:"description"`
 	Address       string   `json:"address" binding:"required"`
 	District      *string  `json:"district"`                     // District UUID from districts table
+	State         *string  `json:"state"`
+	PostalCode    *string  `json:"postal_code"`
 	ContactPhone  string   `json:"contact_phone" binding:"required"`
 	Latitude      *string  `json:"latitude" binding:"required"`  // Required for map location
 	Longitude     *string  `json:"longitude" binding:"required"` // Required for map location
@@ -160,8 +164,11 @@ func (h *LoungeHandler) AddLounge(c *gin.Context) {
 	lounge, err := h.loungeRepo.CreateLounge(
 		owner.ID,
 		req.LoungeName,
+		req.Description,
 		req.Address,
 		districtUUID,
+		req.State,
+		req.PostalCode,
 		req.ContactPhone,
 		req.Latitude,
 		req.Longitude,
@@ -296,9 +303,13 @@ func (h *LoungeHandler) GetMyLounges(c *gin.Context) {
 
 		response = append(response, gin.H{
 			"id":              lounge.ID,
+			"lounge_owner_id": lounge.LoungeOwnerID,
 			"lounge_name":     lounge.LoungeName,
+			"description":     nullableStringToPtr(lounge.Description),
 			"address":         lounge.Address,
 			"district":        lounge.District,
+			"state":           nullableStringToPtr(lounge.State),
+			"postal_code":     nullableStringToPtr(lounge.PostalCode),
 			"contact_phone":   lounge.ContactPhone,
 			"latitude":        lounge.Latitude,
 			"longitude":       lounge.Longitude,
@@ -379,8 +390,11 @@ func (h *LoungeHandler) GetLoungeByID(c *gin.Context) {
 		"id":              lounge.ID,
 		"lounge_owner_id": lounge.LoungeOwnerID,
 		"lounge_name":     lounge.LoungeName,
+		"description":     nullableStringToPtr(lounge.Description),
 		"address":         lounge.Address,
 		"district":        lounge.District,
+		"state":           nullableStringToPtr(lounge.State),
+		"postal_code":     nullableStringToPtr(lounge.PostalCode),
 		"contact_phone":   lounge.ContactPhone,
 		"latitude":        lounge.Latitude,
 		"longitude":       lounge.Longitude,
@@ -407,8 +421,11 @@ func (h *LoungeHandler) GetLoungeByID(c *gin.Context) {
 // UpdateLoungeRequest represents the lounge update request
 type UpdateLoungeRequest struct {
 	LoungeName    string   `json:"lounge_name" binding:"required"`
+	Description   *string  `json:"description"`
 	Address       string   `json:"address" binding:"required"`
 	District      *string  `json:"district"` // District UUID from districts table
+	State         *string  `json:"state"`
+	PostalCode    *string  `json:"postal_code"`
 	ContactPhone  string   `json:"contact_phone" binding:"required"`
 	Latitude      *string  `json:"latitude" binding:"required"`
 	Longitude     *string  `json:"longitude" binding:"required"`
@@ -421,6 +438,22 @@ type UpdateLoungeRequest struct {
 	Images        []string `json:"images"`
 	// Routes that the lounge serves (array of route-stop combinations)
 	Routes []models.LoungeRouteRequest `json:"routes" binding:"required,min=1"`
+}
+
+func nullableStringToPtr(v sql.NullString) *string {
+	if !v.Valid {
+		return nil
+	}
+	s := v.String
+	return &s
+}
+
+func nullableInt64ToPtr(v sql.NullInt64) *int64 {
+	if !v.Valid {
+		return nil
+	}
+	n := v.Int64
+	return &n
 }
 
 // UpdateLounge handles PUT /api/v1/lounges/:id
@@ -528,8 +561,11 @@ func (h *LoungeHandler) UpdateLounge(c *gin.Context) {
 	err = h.loungeRepo.UpdateLounge(
 		loungeID,
 		req.LoungeName,
+		req.Description,
 		req.Address,
 		districtUUID,
+		req.State,
+		req.PostalCode,
 		req.ContactPhone,
 		req.Latitude,
 		req.Longitude,
@@ -579,8 +615,59 @@ func (h *LoungeHandler) UpdateLounge(c *gin.Context) {
 		}
 	}
 
+	updatedLounge, err := h.loungeRepo.GetLoungeByID(loungeID)
+	if err != nil || updatedLounge == nil {
+		log.Printf("ERROR: Failed to fetch updated lounge %s: %v", loungeID, err)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Error:   "database_error",
+			Message: "Lounge updated, but failed to fetch latest data",
+		})
+		return
+	}
+
+	updatedRoutes, err := h.loungeRouteRepo.GetLoungeRoutes(loungeID)
+	if err != nil {
+		log.Printf("WARNING: Failed to fetch updated routes for lounge %s: %v", loungeID, err)
+		updatedRoutes = []models.LoungeRoute{}
+	}
+
+	var amenities []string
+	var images []string
+	if updatedLounge.Amenities != nil {
+		json.Unmarshal(updatedLounge.Amenities, &amenities)
+	}
+	if updatedLounge.Images != nil {
+		json.Unmarshal(updatedLounge.Images, &images)
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"message": "Lounge updated successfully",
+		"lounge": gin.H{
+			"id":              updatedLounge.ID,
+			"lounge_owner_id": updatedLounge.LoungeOwnerID,
+			"lounge_name":     updatedLounge.LoungeName,
+			"description":     nullableStringToPtr(updatedLounge.Description),
+			"address":         updatedLounge.Address,
+			"district":        updatedLounge.District,
+			"state":           nullableStringToPtr(updatedLounge.State),
+			"postal_code":     nullableStringToPtr(updatedLounge.PostalCode),
+			"contact_phone":   nullableStringToPtr(updatedLounge.ContactPhone),
+			"latitude":        nullableStringToPtr(updatedLounge.Latitude),
+			"longitude":       nullableStringToPtr(updatedLounge.Longitude),
+			"capacity":        nullableInt64ToPtr(updatedLounge.Capacity),
+			"price_1_hour":    nullableStringToPtr(updatedLounge.Price1Hour),
+			"price_2_hours":   nullableStringToPtr(updatedLounge.Price2Hours),
+			"price_3_hours":   nullableStringToPtr(updatedLounge.Price3Hours),
+			"price_until_bus": nullableStringToPtr(updatedLounge.PriceUntilBus),
+			"amenities":       amenities,
+			"images":          images,
+			"routes":          updatedRoutes,
+			"status":          updatedLounge.Status,
+			"is_operational":  updatedLounge.IsOperational,
+			"average_rating":  nullableStringToPtr(updatedLounge.AverageRating),
+			"created_at":      updatedLounge.CreatedAt,
+			"updated_at":      updatedLounge.UpdatedAt,
+		},
 	})
 }
 

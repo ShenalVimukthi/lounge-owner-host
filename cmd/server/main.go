@@ -689,6 +689,8 @@ func main() {
 				logger.Info("  ✅ GET /api/v1/lounges/:id (read-only, no approval needed)")
 				loungesProtected.GET("/:id", loungeHandler.GetLoungeByID)
 				// Write operations require approval
+				logger.Info("  ✅ POST /api/v1/lounges (create new lounge, requires approval)")
+				loungesProtected.POST("", middleware.RequireApprovedLoungeOwner(loungeOwnerRepository), loungeHandler.AddLounge)
 				logger.Info("  ✅ PUT /api/v1/lounges/:id (requires approval)")
 				loungesProtected.PUT("/:id", middleware.RequireApprovedLoungeOwner(loungeOwnerRepository), loungeHandler.UpdateLounge)
 				logger.Info("  ✅ DELETE /api/v1/lounges/:id (requires approval)")
