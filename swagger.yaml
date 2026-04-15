@@ -9623,6 +9623,175 @@ paths:
         "500":
           $ref: "#/components/responses/InternalServerError"
 
+  /api/v1/lounge-owner-districts:
+    post:
+      summary: Create lounge owner district mapping
+      description: Create a new record in lounge_owner_districts with owner, business, and district details
+      operationId: createLoungeOwnerDistrict
+      tags:
+        - Lounge Owner
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - owner_id
+                - district_id
+                - owner_name
+                - business_name
+              properties:
+                owner_id:
+                  type: string
+                  format: uuid
+                  example: "2f7b68f6-98e1-4e53-8edf-4f6b9a9f8a9f"
+                district_id:
+                  type: string
+                  format: uuid
+                  example: "550e8400-e29b-41d4-a716-446655440000"
+                owner_name:
+                  type: string
+                  example: "Nimal Perera"
+                business_name:
+                  type: string
+                  example: "Perera Transit Lounge"
+      responses:
+        "201":
+          description: Lounge owner district created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Lounge owner district created successfully
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      owner_id:
+                        type: string
+                        format: uuid
+                      district_id:
+                        type: string
+                        format: uuid
+                      owner_name:
+                        type: string
+                      business_name:
+                        type: string
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/v1/lounge-owner-districts/by-district/{district_id}:
+    get:
+      summary: Get lounge owners and businesses by district
+      description: Returns all lounge_owner_districts rows for the provided district UUID with owner and business details
+      operationId: getLoungeOwnerDistrictsByDistrict
+      tags:
+        - Lounge Owner
+      security: []
+      parameters:
+        - name: district_id
+          in: path
+          required: true
+          description: District UUID
+          schema:
+            type: string
+            format: uuid
+            example: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        "200":
+          description: Lounge owner districts retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  district_id:
+                    type: string
+                    format: uuid
+                  count:
+                    type: integer
+                    example: 2
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        owner_id:
+                          type: string
+                          format: uuid
+                        district_id:
+                          type: string
+                          format: uuid
+                        owner_name:
+                          type: string
+                        business_name:
+                          type: string
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /api/v1/lounge-owner-districts/check-exists:
+    post:
+      summary: Check whether owner-district pair already exists
+      description: |
+        Validates if a given owner_id and district_id pair is already stored in lounge_owner_districts.
+
+        Use this endpoint before creating new records to prevent duplicate owner-district pairs.
+      operationId: checkLoungeOwnerDistrictPairExists
+      tags:
+        - Lounge Owner
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - owner_id
+                - district_id
+              properties:
+                owner_id:
+                  type: string
+                  format: uuid
+                  example: "2f7b68f6-98e1-4e53-8edf-4f6b9a9f8a9f"
+                district_id:
+                  type: string
+                  format: uuid
+                  example: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        "200":
+          description: Pair existence check result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  owner_id:
+                    type: string
+                    format: uuid
+                  district_id:
+                    type: string
+                    format: uuid
+                  already_stored:
+                    type: boolean
+                    description: true if the owner_id + district_id pair is already stored, false otherwise
+                    example: true
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
   # ============================================================================
   # Master Routes Endpoints
   # ============================================================================

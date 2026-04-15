@@ -253,6 +253,8 @@ func main() {
 	masterRouteHandler := handlers.NewMasterRouteHandler(masterRouteRepo)
 	districtRepo := database.NewDistrictRepository(db)
 	districtHandler := handlers.NewDistrictHandler(districtRepo)
+	loungeOwnerDistrictRepo := database.NewLoungeOwnerDistrictRepository(db)
+	loungeOwnerDistrictHandler := handlers.NewLoungeOwnerDistrictHandler(loungeOwnerDistrictRepo)
 
 	// Initialize bus owner route repository and handler
 	busOwnerRouteRepo := database.NewBusOwnerRouteRepository(db)
@@ -898,6 +900,14 @@ func main() {
 		{
 			districts.GET("", districtHandler.ListDistricts)
 			districts.GET("/:id", districtHandler.GetDistrictByID)
+		}
+
+		// Lounge owner districts (create + fetch by district)
+		loungeOwnerDistricts := v1.Group("/lounge-owner-districts")
+		{
+			loungeOwnerDistricts.POST("", loungeOwnerDistrictHandler.Create)
+			loungeOwnerDistricts.POST("/check-exists", loungeOwnerDistrictHandler.CheckExists)
+			loungeOwnerDistricts.GET("/by-district/:district_id", loungeOwnerDistrictHandler.GetByDistrict)
 		}
 
 		// Bus routes (all protected)
