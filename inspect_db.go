@@ -21,7 +21,7 @@ func main() {
 	rows, err := db.Query(`
 		SELECT column_name, data_type, is_nullable, column_default 
 		FROM information_schema.columns 
-		WHERE table_name = 'lounge_booking_driver_assignments'
+		WHERE table_name = 'passengers'
 		ORDER BY column_name
 	`)
 	if err != nil {

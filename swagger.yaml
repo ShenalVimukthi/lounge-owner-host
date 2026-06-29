@@ -8333,7 +8333,8 @@ paths:
   /api/v1/lounges/{lounge_id}/drivers/{driver_id}:
     put:
       summary: Update driver information
-      description: 'Update driver details.
+      description: 'Update driver details. All fields are optional; only provided fields
+        will be updated.
 
 
         **Required:** Lounge owner must be approved.
@@ -8348,7 +8349,7 @@ paths:
       - name: lounge_id
         in: path
         required: true
-        description: Lounge UUID
+        description: Lounge UUID (maps to route param `id`)
         schema:
           type: string
           format: uuid
@@ -8366,22 +8367,38 @@ paths:
             schema:
               type: object
               properties:
-                full_name:
+                name:
                   type: string
-                phone_number:
+                  minLength: 2
+                  maxLength: 100
+                  description: Driver full name
+                  example: John Driver
+                nic_number:
                   type: string
-                  pattern: ^\+94[0-9]{9}$
-                license_number:
+                  description: National Identity Card number
+                  example: '199012345678'
+                contact_no:
                   type: string
+                  description: Driver contact number
+                  example: '+94771234567'
+                vehicle_no:
+                  type: string
+                  description: Vehicle registration number
+                  example: ABC-1234
                 vehicle_type:
                   type: string
-                vehicle_number:
-                  type: string
+                  enum:
+                  - three_wheeler
+                  - car
+                  - van
+                  description: Type of vehicle
+                  example: car
                 status:
                   type: string
                   enum:
                   - active
                   - inactive
+                  description: Driver status
       responses:
         '200':
           description: Driver updated successfully
@@ -8390,9 +8407,37 @@ paths:
               schema:
                 type: object
                 properties:
-                  message:
+                  id:
                     type: string
-                    example: Driver updated successfully
+                    format: uuid
+                  lounge_id:
+                    type: string
+                    format: uuid
+                  name:
+                    type: string
+                  nic_number:
+                    type: string
+                  contact_no:
+                    type: string
+                  vehicle_no:
+                    type: string
+                  vehicle_type:
+                    type: string
+                    enum:
+                    - three_wheeler
+                    - car
+                    - van
+                  status:
+                    type: string
+                    enum:
+                    - active
+                    - inactive
+                  created_at:
+                    type: string
+                    format: date-time
+                  updated_at:
+                    type: string
+                    format: date-time
         '400':
           $ref: '#/components/responses/BadRequest'
         '403':

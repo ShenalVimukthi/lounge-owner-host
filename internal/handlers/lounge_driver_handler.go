@@ -461,7 +461,7 @@ func (h *LoungeDriverHandler) UpdateDriver(c *gin.Context) {
 		updates["name"] = *req.Name
 	}
 	if req.NIC != nil {
-		updates["nic"] = *req.NIC
+		updates["nic_number"] = *req.NIC
 	}
 	if req.ContactNumber != nil {
 		updates["contact_no"] = *req.ContactNumber
