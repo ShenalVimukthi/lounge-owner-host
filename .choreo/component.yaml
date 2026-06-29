@@ -1,4 +1,8 @@
 schemaVersion: "1.2"
+buildConfig:
+  env:
+    - name: GOOGLE_BUILDABLE
+      value: "./cmd/server"
 endpoints:
     - name: sms-auth-api-858
       displayName: sms-auth-api
